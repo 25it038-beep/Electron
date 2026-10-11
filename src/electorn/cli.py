@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import Optional
 import typer
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
@@ -71,12 +73,43 @@ def default_callback(ctx: typer.Context) -> None:
     """Callback triggered when electorn is invoked with no command."""
     if ctx.invoked_subcommand is None:
         print_banner()
-        console.print(
-            "Usage: [bold cyan]electorn \"Build a complete job recommendation platform\"[/bold cyan]\n"
-            "   or: [bold cyan]electorn run \"<prompt>\"[/bold cyan]\n\n"
-            "Available commands: [bold]run[/bold], [bold]models[/bold], [bold]doctor[/bold], [bold]init[/bold], [bold]studio[/bold]\n"
-            "Run [bold]electorn --help[/bold] to see all available commands and flags.\n"
+
+        # Non-interactive / headless environment check (e.g., CI or pipe)
+        if not sys.stdin.is_atty() if hasattr(sys.stdin, "is_atty") else False:
+            console.print(
+                "Usage: [bold cyan]electorn \"Build a complete job recommendation platform\"[/bold cyan]\n"
+                "   or: [bold cyan]electorn chat[/bold cyan]\n"
+                "   or: [bold cyan]electorn run \"<prompt>\"[/bold cyan]\n\n"
+                "Available commands: [bold]run[/bold], [bold]chat[/bold], [bold]models[/bold], [bold]doctor[/bold], [bold]init[/bold], [bold]studio[/bold]\n"
+                "Run [bold]electorn --help[/bold] to see all available commands and flags.\n"
+            )
+            return
+
+        console.print("[bold cyan]Choose your development mode:[/bold cyan]\n")
+        console.print("  [bold green]1.[/bold green] 🚀 [bold white]Autonomous App Creator[/bold white] — Build a full application, generate files, run tests & self-repair")
+        console.print("  [bold magenta]2.[/bold magenta] 💬 [bold white]Futuristic AI Chat Studio[/bold white] — Interactive multi-agent terminal with code streaming, memory & file inspector")
+        console.print("  [bold yellow]3.[/bold yellow] 🩺 [bold white]System Doctor[/bold white] — Audit developer runtimes, Ollama engine & models")
+        console.print("  [bold blue]4.[/bold blue] 🌐 [bold white]HS AI Solutions Studio[/bold white] — Explore the product suite (Pendulum, Lumina, Ledger, HS CODE)")
+        console.print("  [bold red]0.[/bold red] ❌ [bold white]Exit[/bold white]\n")
+
+        choice = Prompt.ask(
+            "[bold cyan]Select an option[/bold cyan]",
+            choices=["1", "2", "3", "4", "0"],
+            default="1",
         )
+
+        if choice == "1":
+            user_prompt = Prompt.ask("\n[bold green]Enter your application description or goal[/bold green]")
+            if user_prompt.strip():
+                run_development_pipeline(prompt=user_prompt.strip(), workspace=Path("."))
+        elif choice == "2":
+            chat_command()
+        elif choice == "3":
+            doctor_command()
+        elif choice == "4":
+            studio_command()
+        else:
+            console.print("\n[yellow]Exiting Electorn AI. Goodbye![/yellow]")
 
 
 @app.command(name="run", help="Build a full application from a prompt description.")
@@ -421,10 +454,161 @@ def studio_command() -> None:
     )
 
 
-@app.command(name="hs", hidden=True, help="Alias for studio command.")
-def hs_alias_command() -> None:
-    """Alias for studio command."""
-    studio_command()
+@app.command(name="chat", help="Launch futuristic multi-agent interactive chat studio.")
+def chat_command(
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Workspace directory to interact with",
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help="Target Ollama model name",
+    ),
+) -> None:
+    """Futuristic conversational terminal with specialized AI agents, file inspection & code streaming."""
+    print_banner()
+
+    cfg = load_config(workspace)
+    client = OllamaClient(
+        base_url=cfg.runtime.ollama_base_url,
+        timeout=cfg.runtime.timeout_seconds,
+    )
+
+    if not client.is_available():
+        console.print(f"[bold red]❌ Cannot connect to Ollama at {client.base_url}[/bold red]")
+        sys.exit(1)
+
+    team = MultiAgentTeam(
+        workspace_dir=workspace,
+        config=cfg,
+        model_name=model,
+        auto_approve=True,
+    )
+    profile = team.model_profile
+
+    # Agent registry for dynamic switching
+    agent_map = {
+        "architect": (team.architect, "🧠", "System Architecture & File Blueprints"),
+        "backend": (team.backend, "⚙️", "Server, API & Business Logic"),
+        "frontend": (team.frontend, "🎨", "UI, Client Templates & Styling"),
+        "database": (team.database, "🗄️", "Data Models & SQL Persistence"),
+        "qa": (team.qa_tester, "🧪", "Automated Tests & Quality Assurance"),
+        "devops": (team.devops, "📦", "Environments, Docker & Deployment"),
+    }
+    current_agent_key = "architect"
+    current_agent, current_icon, current_desc = agent_map[current_agent_key]
+
+    chat_banner = (
+        f"🌌 [bold cyan]ELECTORN FUTURISTIC AI STUDIO[/bold cyan]\n"
+        f"Active Neural Engine: [bold green]{profile.name}[/bold green] ({profile.description})\n"
+        f"Active Persona: {current_icon} [bold yellow]{current_agent.name}[/bold yellow] — {current_desc}\n"
+        f"Target Workspace: [bold white]{team.workspace_dir}[/bold white]\n\n"
+        f"[dim]Commands: [bold]/agent <name>[/bold] (architect|backend|frontend|database|qa|devops) | "
+        f"[bold]/files[/bold] | [bold]/read <file>[/bold] | [bold]/build <prompt>[/bold] | [bold]/clear[/bold] | [bold]/exit[/bold][/dim]"
+    )
+    console.print(Panel(chat_banner, border_style="magenta", padding=(1, 2)))
+    console.print("")
+
+    conversation_history: list[dict[str, str]] = []
+
+    while True:
+        try:
+            user_input = Prompt.ask(f"[bold cyan]You[/bold cyan] ❯").strip()
+            if not user_input:
+                continue
+
+            # Slash commands
+            if user_input.lower() in ("/exit", "/quit", "exit", "quit"):
+                console.print("\n[yellow]Shutting down Electorn Studio. Until next time! 🚀[/yellow]")
+                break
+
+            if user_input.lower() == "/clear":
+                conversation_history.clear()
+                console.print("[dim]Conversation buffer cleared.[/dim]\n")
+                continue
+
+            if user_input.lower() == "/files":
+                files = team.file_manager.list_files()
+                tree = Tree(f"📁 [bold cyan]{team.workspace_dir.name}[/bold cyan] ({len(files)} files)")
+                for f in files:
+                    tree.add(f"[green]{f}[/green]")
+                console.print(tree)
+                console.print("")
+                continue
+
+            if user_input.lower().startswith("/read "):
+                target_file = user_input[6:].strip()
+                try:
+                    content = team.file_manager.read_file(target_file)
+                    console.print(Panel(content, title=f"📄 {target_file}", border_style="green"))
+                except Exception as e:
+                    console.print(f"[bold red]Error reading file:[/bold red] {e}")
+                console.print("")
+                continue
+
+            if user_input.lower().startswith("/agent "):
+                target_key = user_input[7:].strip().lower()
+                if target_key in agent_map:
+                    current_agent_key = target_key
+                    current_agent, current_icon, current_desc = agent_map[current_agent_key]
+                    console.print(f"\n🔄 [bold green]Switched persona to:[/bold green] {current_icon} [bold yellow]{current_agent.name}[/bold yellow] ({current_desc})\n")
+                else:
+                    console.print(f"[yellow]Unknown agent. Choose from: {', '.join(agent_map.keys())}[/yellow]\n")
+                continue
+
+            if user_input.lower().startswith("/build "):
+                build_prompt = user_input[7:].strip()
+                console.print(f"\n🚀 [bold green]Initiating Autonomous Multi-Agent Development Pipeline for:[/bold green] \"{build_prompt}\"\n")
+                run_development_pipeline(prompt=build_prompt, workspace=team.workspace_dir, model=model, auto_approve=True)
+                continue
+
+            # Interactive AI Response
+            conversation_history.append({"role": "user", "content": user_input})
+            # Keep history compact for small model context budgets
+            if len(conversation_history) > 8:
+                conversation_history = conversation_history[-8:]
+
+            # Inject active workspace awareness into prompt
+            workspace_summary = team.file_manager.get_directory_tree_str()
+            augmented_prompt = (
+                f"[SYSTEM CONTEXT: You are {current_agent.name} ({current_agent.role}). "
+                f"Workspace files: {', '.join(team.file_manager.list_files()[:10]) or 'empty'}]\n\n"
+                f"User Question: {user_input}"
+            )
+
+            with console.status(f"[magenta]{current_icon} {current_agent.name} synthesizing solution...[/magenta]", spinner="dots"):
+                response = current_agent.ask(augmented_prompt)
+
+            # Display formatted markdown
+            console.print(f"\n{current_icon} [bold yellow]{current_agent.name}[/bold yellow] ❯")
+            console.print(Markdown(response.content))
+
+            # Auto-detect if agent generated code files and ask user if they want to write them
+            detected_files = BaseAgent.extract_files_from_text(response.content)
+            if detected_files:
+                console.print("")
+                for f_path, f_code in detected_files.items():
+                    save_choice = Prompt.ask(
+                        f"  💾 Detected code for [bold cyan]{f_path}[/bold cyan]. Save directly to workspace?",
+                        choices=["y", "n"],
+                        default="y",
+                    )
+                    if save_choice.lower() == "y":
+                        op = team.file_manager.write_file(f_path, f_code)
+                        console.print(f"  ✔ [bold green]Saved[/bold green] {op.path} ({op.bytes_written} bytes)")
+
+            conversation_history.append({"role": "assistant", "content": response.content})
+            console.print("")
+
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Chat session closed.[/yellow]")
+            break
+        except Exception as err:
+            console.print(f"[bold red]Chat Error:[/bold red] {err}\n")
 
 
 
