@@ -1227,8 +1227,12 @@ def chat_command(
             workspace_files = team.file_manager.list_files()[:10]
             ws_context = f"Workspace files: {', '.join(workspace_files) if workspace_files else 'empty'}"
             augmented_prompt = (
-                f"[SYSTEM CONTEXT: You are {current_agent.name} ({current_agent.role}). {ws_context}]\n"
+                f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Studio.\n"
+                f"Target Workspace: {team.workspace_dir} ({ws_context})\n"
                 f"{web_context_prompt}\n"
+                f"Guidelines: Answer the user directly, helpfully, and conversationally. "
+                f"If the user greets you or asks a question, answer with natural explanation first. "
+                f"Only generate file code blocks when specifically asked to design, write, or build code.\n\n"
                 f"User Question: {effective_query}"
             )
 
