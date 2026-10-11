@@ -42,7 +42,8 @@ def test_test_runner_discovery():
 
         # Write test file
         fm.write_file("tests/test_demo.py", "def test_ok():\n    assert 1 == 1\n")
-        assert tr.discover_test_command() == "python -m pytest -q"
+        cmd = tr.discover_test_command()
+        assert cmd is not None and "pytest -q" in cmd
 
         # Execute tests
         res = tr.run_tests()

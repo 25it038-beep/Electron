@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from typing import Optional
 from pydantic import BaseModel, Field
 from electorn.execution.runner import CommandRunner, ExecutionResult
@@ -40,7 +41,7 @@ class TestRunner:
             for f in files
         )
         if has_python_tests:
-            return "python -m pytest -q"
+            return f'"{sys.executable}" -m pytest -q'
 
         # Node / JS test discovery
         if "package.json" in files:
