@@ -138,10 +138,16 @@ def run_command(
         help="Ollama model name",
     ),
     auto_approve: bool = typer.Option(
-        False,
+        True,
         "--yes",
         "-y",
-        help="Auto-approve file creation and executions",
+        help="Auto-approve routine development operations",
+    ),
+    preview: bool = typer.Option(
+        False,
+        "--preview",
+        "-p",
+        help="Launch background dev server and detect active localhost port upon completion",
     ),
     mock: bool = typer.Option(
         False,
@@ -156,6 +162,7 @@ def run_command(
         workspace=workspace,
         model=model,
         auto_approve=auto_approve,
+        preview=preview,
         mock=mock,
     )
 
@@ -164,7 +171,8 @@ def run_development_pipeline(
     prompt: str,
     workspace: Path,
     model: Optional[str] = None,
-    auto_approve: bool = False,
+    auto_approve: bool = True,
+    preview: bool = False,
     mock: bool = False,
 ) -> None:
     """Core development pipeline execution loop with Rich terminal UI."""
@@ -234,46 +242,32 @@ def run_development_pipeline(
     )
     console.print("")
 
-    # Callbacks for Rich live status
-    def on_step_start(agent_name: str, desc: str) -> None:
-        console.print(f"⏳ [bold cyan][{agent_name}][/bold cyan] {desc}...")
-
-    def on_step_complete(agent_name: str, artifacts: list[str]) -> None:
-        art_str = f" [dim]({', '.join(artifacts[:3])}{'...' if len(artifacts) > 3 else ''})[/dim]" if artifacts else ""
-        console.print(f"  ✔ [bold green][{agent_name}][/bold green] Completed{art_str}\n")
-
-    def on_info(msg: str) -> None:
-        console.print(f"  [yellow]{msg}[/yellow]")
-
     try:
-        with console.status(f"[bold green]Electorn multi-agent team collaborating on {team.workspace_dir.name}...[/bold green]", spinner="dots"):
-            state = team.develop(
-                prompt=prompt,
-                on_step_start=on_step_start,
-                on_step_complete=on_step_complete,
-                on_info=on_info,
-            )
+        build_res = team.build_application(
+            prompt=prompt,
+            install_deps=True,
+            launch_preview=preview,
+        )
 
-        console.print("\n✨ [bold green]Development Workflow Completed Successfully![/bold green]\n")
+        console.print("\n✨ [bold green]Autonomous Application Build Finished![/bold green]\n")
 
         # Summary Tree
-        tree = Tree(f"📦 [bold cyan]{state.specification.project_name if state.specification else 'Project'}[/bold cyan]")
+        tree = Tree(f"📦 [bold cyan]{build_res.project_name}[/bold cyan]")
         for f in team.file_manager.list_files():
             tree.add(f"[green]{f}[/green]")
         console.print(tree)
         console.print("")
 
-        if state.specification:
-            spec = state.specification
-            summary_table = Table(title="🚀 Application Quickstart", border_style="cyan")
-            summary_table.add_column("Property", style="bold white")
-            summary_table.add_column("Details", style="cyan")
-            summary_table.add_row("Run Command", spec.run_command)
-            summary_table.add_row("Test Command", spec.test_command)
-            summary_table.add_row("Tech Stack", ", ".join(f"{k}: {v}" for k, v in spec.tech_stack.items()))
-            if spec.dependencies:
-                summary_table.add_row("Dependencies", ", ".join(spec.dependencies))
-            console.print(summary_table)
+        summary_table = Table(title="🚀 Application Quickstart", border_style="cyan")
+        summary_table.add_column("Property", style="bold white")
+        summary_table.add_column("Details", style="cyan")
+        summary_table.add_row("Run Command", build_res.start_command or "python -m uvicorn ...")
+        summary_table.add_row("Test Command", build_res.test_command or "pytest")
+        summary_table.add_row("Dependencies", build_res.dependencies_message)
+        summary_table.add_row("Status", build_res.final_status)
+        if build_res.preview_url:
+            summary_table.add_row("Preview URL", build_res.preview_url)
+        console.print(summary_table)
 
         console.print(f"\n[dim]Session audit saved to: {team.workspace_dir}/.electorn/sessions/{team.session_id}.json[/dim]\n")
 
@@ -283,6 +277,72 @@ def run_development_pipeline(
     except Exception as err:
         console.print(f"\n[bold red]Pipeline failed with error:[/bold red] {err}")
         sys.exit(1)
+
+
+@app.command(name="preview", help="Launch background dev server for the workspace application.")
+def preview_command(
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Workspace directory",
+    ),
+    cmd: Optional[str] = typer.Option(
+        None,
+        "--command",
+        "-c",
+        help="Custom server command (auto-detected if omitted)",
+    ),
+) -> None:
+    """Launch application preview server and report active port."""
+    print_banner()
+    cfg = load_config(workspace)
+    team = MultiAgentTeam(workspace_dir=workspace, config=cfg, auto_approve=True)
+
+    server_cmd = cmd
+    if not server_cmd:
+        # Check project memory or package.json/main.py
+        mem_cmds = team.project_memory.data.build_commands
+        if "run" in mem_cmds and mem_cmds["run"]:
+            server_cmd = mem_cmds["run"]
+        elif (team.workspace_dir / "package.json").exists():
+            server_cmd = "npm run dev"
+        elif (team.workspace_dir / "main.py").exists():
+            server_cmd = "python main.py"
+        elif (team.workspace_dir / "app.py").exists():
+            server_cmd = "python app.py"
+        else:
+            server_cmd = "python -m http.server 8000"
+
+    console.print(f"🚀 [bold green]Starting background dev server:[/bold green] [cyan]{server_cmd}[/cyan]...")
+    proc_info = team.powershell.start_background_server(server_cmd, name=team.workspace_dir.name)
+    if proc_info.port:
+        console.print(f"✨ [bold green]Server live at:[/bold green] [underline cyan]http://localhost:{proc_info.port}[/underline cyan] (PID: {proc_info.pid})")
+    else:
+        console.print(f"✨ [bold green]Server process running[/bold green] (PID: {proc_info.pid})")
+    console.print(f"[dim]To terminate background processes, run: [bold]electorn stop[/bold][/dim]\n")
+
+
+@app.command(name="stop", help="Stop background servers started by Electorn in this workspace.")
+def stop_command(
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Workspace directory",
+    ),
+) -> None:
+    """Stop all background servers started in workspace."""
+    print_banner()
+    cfg = load_config(workspace)
+    team = MultiAgentTeam(workspace_dir=workspace, config=cfg, auto_approve=True)
+
+    stopped = team.powershell.stop_all_processes()
+    if stopped:
+        console.print(f"✔ [bold green]Stopped {len(stopped)} background process(es):[/bold green] {', '.join(map(str, stopped))}\n")
+    else:
+        console.print("[dim]No active background Electorn processes found in this workspace.[/dim]\n")
+
 
 
 @app.command(name="models", help="List installed Ollama models and check compatibility.")
@@ -363,6 +423,11 @@ def doctor_command() -> None:
         "Node.js",
         f"[green]✔ {env.node_version}[/green]" if env.has_node else "[dim]Not installed[/dim]",
         "Frontend JavaScript runtime",
+    )
+    table.add_row(
+        "PowerShell Engine",
+        f"[green]✔ Available ({env.powershell_version or 'Windows PowerShell'})[/green]" if env.has_powershell else "[yellow]✖ Missing[/yellow]",
+        "Windows automation & script execution engine",
     )
     table.add_row(
         "Docker",

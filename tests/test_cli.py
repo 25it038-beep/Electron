@@ -29,12 +29,12 @@ def test_cli_init_and_run_mock():
         # Run mock via explicit 'run' command
         run_res = runner.invoke(app, ["run", "Build a minimal calculator", "--mock", "-y"])
         assert run_res.exit_code == 0
-        assert "Development Workflow Completed Successfully" in run_res.output
+        assert "Autonomous Application Build Finished" in run_res.output
 
         # Run mock via direct prompt (electorn "<prompt>")
         direct_res = runner.invoke(app, ["Build a second tool", "--mock", "-y"])
         assert direct_res.exit_code == 0
-        assert "Development Workflow Completed Successfully" in direct_res.output
+        assert "Autonomous Application Build Finished" in direct_res.output
 
 
 def test_cli_studio():

@@ -24,6 +24,8 @@ class ToolEnvironment(BaseModel):
     has_bun: bool = False
     has_ollama: bool = False
     ollama_running: bool = False
+    has_powershell: bool = False
+    powershell_version: str = ""
 
 
 class EnvironmentDetector:
@@ -59,6 +61,16 @@ class EnvironmentDetector:
         has_bun, _ = cls._run_tool_version(["bun", "--version"])
         has_ollama, _ = cls._run_tool_version(["ollama", "--version"])
 
+        # Detect PowerShell
+        has_pwsh, pwsh_ver = cls._run_tool_version(["pwsh", "--version"])
+        if not has_pwsh:
+            has_ps, _ = cls._run_tool_version(["powershell", "-NoProfile", "-Command", "$PSVersionTable.PSVersion.Major"])
+            has_powershell = has_ps
+            powershell_version = "5.1 (Windows PowerShell)" if has_ps else ""
+        else:
+            has_powershell = True
+            powershell_version = pwsh_ver or "PowerShell Core"
+
         return ToolEnvironment(
             os_system=platform.system(),
             os_release=platform.release(),
@@ -71,4 +83,6 @@ class EnvironmentDetector:
             has_docker=has_docker,
             has_bun=has_bun,
             has_ollama=has_ollama,
+            has_powershell=has_powershell,
+            powershell_version=powershell_version,
         )

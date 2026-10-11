@@ -13,7 +13,9 @@ from electorn.agents.frontend import FrontendAgent
 from electorn.agents.integration import IntegrationAgent
 from electorn.agents.qa_tester import QATesterAgent
 from electorn.agents.ui_ux import UIUXAgent
+from electorn.execution.powershell import PowerShellExecutionEngine
 from electorn.execution.runner import CommandRunner
+from electorn.orchestration.application_builder import ApplicationBuilder
 from electorn.orchestration.memory_manager import MemoryManager
 from electorn.orchestration.workflow import WorkflowPipeline
 from electorn.runtime.model_selector import ModelProfile, ModelSelector
@@ -69,6 +71,10 @@ class MultiAgentTeam:
         )
 
         # Execution and Verification Tools
+        self.powershell = PowerShellExecutionEngine(
+            workspace_dir=self.workspace_dir,
+            permissions=self.permissions,
+        )
         self.runner = CommandRunner(
             workspace_dir=self.workspace_dir,
             permissions=self.permissions,
@@ -107,8 +113,13 @@ class MultiAgentTeam:
         self.qa_tester = QATesterAgent(self.client, self.model_profile)
         self.devops = DevOpsAgent(self.client, self.model_profile)
 
-        # Workflow Pipeline
+        # Workflow Pipeline & Dedicated Builder
         self.pipeline = WorkflowPipeline(self)
+        self.builder = ApplicationBuilder(self)
+
+    def build_application(self, prompt: str, install_deps: bool = True, launch_preview: bool = False):
+        """Execute autonomous application building engine."""
+        return self.builder.build(prompt, install_dependencies=install_deps, launch_preview=launch_preview)
 
     def develop(self, prompt: str, **callbacks):
         """Execute the full development lifecycle for the user prompt."""
