@@ -61,26 +61,64 @@ class BaseAgent:
             format_json=format_json,
         )
 
-    def generate_files(self, task_description: str, context: str) -> dict[str, str]:
+    def generate_files(self, task_description: str, context: str, expected_files: Optional[list[str]] = None) -> dict[str, str]:
         """Ask model to produce files and extract them into path -> code mapping."""
+        expected_str = f"\nREQUIRED FILES TO IMPLEMENT:\n" + "\n".join(f"- {f}" for f in expected_files) if expected_files else ""
         prompt = f"""
 TASK:
 {task_description}
 
 PROJECT CONTEXT:
 {context}
+{expected_str}
 
-INSTRUCTIONS:
-Output the required files. Format each file clearly as follows:
+CRITICAL IMPLEMENTATION STANDARDS:
+1. Every file MUST be 100% complete, fully implemented, working, and immediately runnable.
+2. DO NOT use placeholders, stub implementations, ellipsis (...), or comments like '# TODO', '# implement here', '# logic goes here'.
+3. Write real functions, classes, data models, error handling, input validation, and full execution flow.
+4. If writing HTML/CSS/JS, provide a polished, modern, interactive user interface.
+5. If writing Python APIs or CLI tools, include full command handling, arguments, data structures, and main entrypoint.
+
+OUTPUT FORMAT:
+Format EVERY file strictly as:
 FILE: relative/path/to/filename.ext
 ```
-// full file code here
+// Complete working source code here
 ```
-
-Every file MUST contain complete, working, runnable code.
 """
         response = self.ask(prompt)
-        return self.extract_files_from_text(response.content)
+        files = self.extract_files_from_text(response.content)
+
+        # If any expected files were missing from bulk response, generate them individually
+        if expected_files:
+            for exp in expected_files:
+                clean_exp = exp.replace("\\", "/").strip()
+                matching = [k for k in files if k.replace("\\", "/").strip() == clean_exp]
+                if not matching:
+                    single_prompt = f"""
+Write the complete production source code for file '{clean_exp}'.
+
+PROJECT CONTEXT:
+{context}
+
+TASK DETAILS:
+{task_description}
+
+CRITICAL: Provide 100% complete working implementation for '{clean_exp}'. No TODOs or placeholders.
+Format as:
+FILE: {clean_exp}
+```
+// full complete code
+```
+"""
+                    single_resp = self.ask(single_prompt)
+                    single_files = self.extract_files_from_text(single_resp.content)
+                    if clean_exp in single_files:
+                        files[clean_exp] = single_files[clean_exp]
+                    elif single_files:
+                        files.update(single_files)
+
+        return files
 
     @staticmethod
     def extract_files_from_text(text: str) -> dict[str, str]:

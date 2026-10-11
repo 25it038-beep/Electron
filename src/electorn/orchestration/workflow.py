@@ -63,7 +63,7 @@ class WorkflowPipeline:
             task = f"Create the database models and storage logic for the following files:\n" + "\n".join(
                 f"- {f.path}: {f.purpose}" for f in db_entries
             )
-            files = self.team.database.generate_files(task, ctx)
+            files = self.team.database.generate_files(task, ctx, expected_files=[f.path for f in db_entries])
             written = []
             for path, content in files.items():
                 self.team.file_manager.write_file(path, content)
@@ -86,7 +86,7 @@ class WorkflowPipeline:
             task = f"Implement the core server services and endpoints for the following files:\n" + "\n".join(
                 f"- {f.path}: {f.purpose}" for f in backend_entries
             )
-            files = self.team.backend.generate_files(task, ctx)
+            files = self.team.backend.generate_files(task, ctx, expected_files=[f.path for f in backend_entries])
             written = []
             for path, content in files.items():
                 self.team.file_manager.write_file(path, content)
@@ -109,7 +109,7 @@ class WorkflowPipeline:
             task = f"Create the user interface and frontend components for the following files:\n" + "\n".join(
                 f"- {f.path}: {f.purpose}" for f in frontend_entries
             )
-            files = self.team.frontend.generate_files(task, ctx)
+            files = self.team.frontend.generate_files(task, ctx, expected_files=[f.path for f in frontend_entries])
             written = []
             for path, content in files.items():
                 self.team.file_manager.write_file(path, content)
@@ -132,7 +132,7 @@ class WorkflowPipeline:
             task = f"Implement integration contracts and glue code for:\n" + "\n".join(
                 f"- {f.path}: {f.purpose}" for f in integration_entries
             )
-            files = self.team.integration.generate_files(task, ctx)
+            files = self.team.integration.generate_files(task, ctx, expected_files=[f.path for f in integration_entries])
             written = []
             for path, content in files.items():
                 self.team.file_manager.write_file(path, content)
@@ -155,7 +155,8 @@ class WorkflowPipeline:
                 f"validations, and edge cases. Ensure test files start with 'test_' or reside in 'tests/'.\n"
                 f"Planned test targets: " + ", ".join(f.path for f in test_targets)
             )
-            files = self.team.qa_tester.generate_files(task, ctx)
+            expected_test_paths = [f.path for f in test_entries] if test_entries else ["tests/test_main.py"]
+            files = self.team.qa_tester.generate_files(task, ctx, expected_files=expected_test_paths)
             written = []
             for path, content in files.items():
                 self.team.file_manager.write_file(path, content)
