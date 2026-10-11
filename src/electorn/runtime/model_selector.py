@@ -23,7 +23,7 @@ class ModelSelector:
     """Detects, ranks, and configures Ollama models for development workflows."""
 
     # Coding-focused keywords in model names
-    CODE_KEYWORDS = ["coder", "code", "dev", "deepseek-coder", "starcoder", "qwen"]
+    CODE_KEYWORDS = ["coder", "code", "dev", "deepseek-coder", "starcoder", "codellama"]
 
     def __init__(self, client: OllamaClient):
         self.client = client
@@ -101,24 +101,28 @@ class ModelSelector:
         def score(p: ModelProfile) -> float:
             s = 0.0
             if p.is_code_specialized:
+                s += 40.0
+            # Sweet spot: 3B-8B models run fast locally without hanging
+            if p.tier == "small":
                 s += 50.0
-            if p.tier == "medium":
-                s += 30.0
-            elif p.tier == "small":
-                s += 25.0
+            elif p.tier == "medium":
+                s += 40.0
             else:
-                s += 15.0
-            # Prefer newer common instruction models, but penalize VL (vision-only) models for pure code generation
-            if "-vl:" in p.name.lower() or "vision" in p.name.lower():
-                s -= 20.0
-            if "coder" in p.name.lower():
+                # Heavy 14B+ models frequently hang or exceed local GPU/VRAM limits
+                s -= 50.0
+
+            # Heavily penalize vision/multimodal models for pure source code tasks
+            if "-vl" in p.name.lower() or "vision" in p.name.lower():
+                s -= 60.0
+
+            # Favor tested models with stellar speed/quality balance
+            if "llama3.2" in p.name.lower():
+                s += 35.0
+            elif "llama3" in p.name.lower():
+                s += 25.0
+            elif "qwen2.5-coder" in p.name.lower():
                 s += 30.0
-            if "llama3.2" in p.name.lower() and "-vl" not in p.name.lower():
-                s += 20.0
-            elif "qwen" in p.name.lower():
-                s += 10.0
-            elif "llama" in p.name.lower():
-                s += 8.0
+
             return s
 
         profiles.sort(key=score, reverse=True)
