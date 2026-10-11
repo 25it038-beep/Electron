@@ -49,7 +49,7 @@ class ModelSelector:
 
         if param_approx <= 4.5:
             tier = "small"
-            recommended_context = 4096
+            recommended_context = 2048
         elif param_approx <= 9.0:
             tier = "medium"
             recommended_context = 8192

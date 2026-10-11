@@ -168,6 +168,7 @@ class OllamaClient:
             "options": {
                 "temperature": temperature,
                 "num_ctx": context_tokens,
+                "num_thread": max(1, (os.cpu_count() or 4) - 2),
             },
             "keep_alive": keep_alive,
         }
@@ -238,7 +239,9 @@ class OllamaClient:
             "options": {
                 "temperature": temperature,
                 "num_ctx": context_tokens,
+                "num_thread": max(1, (os.cpu_count() or 4) - 2),
             },
+            "keep_alive": "10m",
         }
 
         with self._http.stream("POST", "/api/chat", json=payload, timeout=self.timeout) as response:
