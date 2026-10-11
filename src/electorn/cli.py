@@ -32,6 +32,7 @@ from electorn.verification.quality_report import ExecutedCheck, QualityReport
 from electorn.workspace.checkpoints import CheckpointManager
 from electorn.workspace.file_manager import FileOperationResult
 from electorn.workspace.project_state import ProjectState
+from electorn.voice import VoiceEngine
 
 
 # Force UTF-8 on Windows terminals to support emojis and rich unicode formatting
@@ -106,13 +107,14 @@ def default_callback(ctx: typer.Context) -> None:
         console.print("[bold cyan]Choose your development mode:[/bold cyan]\n")
         console.print("  [bold green]1.[/bold green] 🚀 [bold white]Autonomous App Creator[/bold white] — Build a full application, generate files, run tests & self-repair")
         console.print("  [bold magenta]2.[/bold magenta] 💬 [bold white]Futuristic AI Chat Studio[/bold white] — Interactive multi-agent terminal with code streaming, memory & file inspector")
-        console.print("  [bold yellow]3.[/bold yellow] 🩺 [bold white]System Doctor[/bold white] — Audit developer runtimes, Ollama engine & models")
-        console.print("  [bold blue]4.[/bold blue] 🌐 [bold white]HS AI Solutions Studio[/bold white] — Explore the product suite (Pendulum, Lumina, Ledger, HS CODE)")
+        console.print("  [bold cyan]3.[/bold cyan] 🎙️ [bold white]Hands-Free Voice Assistant[/bold white] — Speak with your mic & hear responses spoken aloud")
+        console.print("  [bold yellow]4.[/bold yellow] 🩺 [bold white]System Doctor[/bold white] — Audit developer runtimes, Ollama engine & models")
+        console.print("  [bold blue]5.[/bold blue] 🌐 [bold white]HS AI Solutions Studio[/bold white] — Explore the product suite (Pendulum, Lumina, Ledger, HS CODE)")
         console.print("  [bold red]0.[/bold red] ❌ [bold white]Exit[/bold white]\n")
 
         choice = Prompt.ask(
             "[bold cyan]Select an option[/bold cyan]",
-            choices=["1", "2", "3", "4", "0"],
+            choices=["1", "2", "3", "4", "5", "0"],
             default="1",
         )
 
@@ -123,8 +125,10 @@ def default_callback(ctx: typer.Context) -> None:
         elif choice == "2":
             chat_command()
         elif choice == "3":
-            doctor_command()
+            voice_command()
         elif choice == "4":
+            doctor_command()
+        elif choice == "5":
             studio_command()
         else:
             console.print("\n[yellow]Exiting Electorn AI. Goodbye![/yellow]")
@@ -1093,6 +1097,8 @@ def chat_command(
     profile = team.model_profile
     selector = ModelSelector(client)
     web_searcher = WebSearchEngine()
+    voice = VoiceEngine()
+    voice_output_active = False
 
     # Agent registry for dynamic switching
     agent_map = {
@@ -1112,6 +1118,8 @@ def chat_command(
         table.add_column("Description", style="white")
         table.add_row("/search <query>", "🌐 Run autonomous live web search without API keys")
         table.add_row("/web <prompt>", "🌐 Search web & synthesize answer with live citations")
+        table.add_row("/voice", "🎙️ Toggle voice output (spoken replies aloud)")
+        table.add_row("/listen", "🎙️ Record from microphone and transcribe into chat prompt")
         table.add_row("/agent <name>", "🔄 Switch active persona (architect, backend, frontend, database, qa, devops)")
         table.add_row("/model [name]", "⚡ Inspect installed Ollama models or switch active model")
         table.add_row("/files", "📁 Inspect workspace file hierarchy tree")
@@ -1128,7 +1136,7 @@ def chat_command(
         f"Active Neural Engine: [bold green]{profile.name}[/bold green] ({profile.description})\n"
         f"Active Persona: {current_icon} [bold yellow]{current_agent.name}[/bold yellow] — {current_desc}\n"
         f"Mode: [bold green]Lightning Standalone Chat (Zero I/O Latency)[/bold green]\n\n"
-        f"[dim]Commands: [bold]/search <query>[/bold] | [bold]/web <query>[/bold] | [bold]/agent <name>[/bold] | "
+        f"[dim]Commands: [bold]/search <query>[/bold] | [bold]/voice[/bold] | [bold]/listen[/bold] | [bold]/agent <name>[/bold] | "
         f"[bold]/model [name][/bold] | [bold]/build <prompt>[/bold] | [bold]/help[/bold] | [bold]/exit[/bold][/dim]"
     )
     console.print(Panel(chat_banner, border_style="magenta", padding=(1, 2)))
@@ -1150,6 +1158,35 @@ def chat_command(
             if user_input.lower() in ("/help", "help", "?"):
                 display_help()
                 continue
+
+            if user_input.lower().startswith("/voice"):
+                parts = user_input.strip().split()
+                if len(parts) > 1 and parts[1].lower() in ("female", "male"):
+                    voice.set_gender(parts[1].lower())
+                    voice_output_active = True
+                    console.print(f"🎙️ Voice output set to [bold magenta]{parts[1].capitalize()}[/bold magenta] voice (Enabled).\n")
+                    voice.speak(f"{parts[1].capitalize()} voice enabled.", async_mode=True)
+                else:
+                    voice_output_active = not voice_output_active
+                    gender_str = voice.voice_gender.capitalize()
+                    status = f"[bold green]ON[/bold green] ({gender_str} Voice - responses spoken aloud)" if voice_output_active else "[dim]OFF[/dim]"
+                    console.print(f"🎙️ Voice output toggled: {status}\n")
+                    if voice_output_active:
+                        voice.speak(f"{gender_str} voice output enabled.", async_mode=True)
+                continue
+
+            if user_input.lower() in ("/listen", "/mic"):
+                if not voice.is_supported():
+                    console.print("[yellow]Voice dependencies (sounddevice, speech_recognition) are not available.[/yellow]\n")
+                    continue
+                def _mic_status(m: str) -> None:
+                    console.print(f"[dim cyan]{m}[/dim cyan]")
+                heard = voice.listen_and_transcribe(record_seconds=5.0, status_cb=_mic_status)
+                if not heard:
+                    console.print("[dim yellow]No clear speech detected.[/dim yellow]\n")
+                    continue
+                console.print(f"🎙️ [bold cyan]Transcribed:[/bold cyan] [white]{heard}[/white]\n")
+                user_input = heard
 
             if user_input.lower() == "/clear":
                 conversation_history.clear()
@@ -1277,7 +1314,7 @@ def chat_command(
             except Exception as stream_err:
                 console.print(f"\n[dim yellow]Streaming paused ({stream_err}), executing direct generation...[/dim yellow]")
                 try:
-                    direct_resp = current_agent.ask(augmented_prompt)
+                    direct_resp = current_agent.ask(user_prompt)
                     console.print(direct_resp.content)
                     streamed_chunks = [direct_resp.content]
                 except Exception as direct_err:
@@ -1289,6 +1326,8 @@ def chat_command(
 
             if full_text:
                 conversation_history.append({"role": "assistant", "content": full_text})
+                if voice_output_active:
+                    voice.speak(full_text, async_mode=True)
 
                 # Auto-detect if agent generated code files and prompt user to write them
                 detected_files = BaseAgent.extract_files_from_text(full_text)
@@ -1311,6 +1350,147 @@ def chat_command(
         except Exception as err:
             console.print(f"[bold red]Chat Error:[/bold red] {err}\n")
 
+
+
+@app.command(name="voice", help="Launch interactive hands-free voice mode with Electorn AI.")
+def voice_command(
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Workspace directory to interact with",
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help="Target Ollama model name",
+    ),
+) -> None:
+    """Hands-free voice assistant: listens to your microphone and speaks responses aloud."""
+    if hasattr(workspace, "default"):
+        workspace = getattr(workspace, "default", Path("."))
+    if hasattr(model, "default"):
+        model = getattr(model, "default", None)
+    if not isinstance(workspace, Path):
+        workspace = Path(str(workspace) if workspace else ".")
+
+    print_banner()
+
+    cfg = load_config(workspace)
+    client = OllamaClient(
+        base_url=cfg.runtime.ollama_base_url,
+        timeout=cfg.runtime.timeout_seconds,
+    )
+
+    if not client.is_available():
+        console.print(f"[bold red]❌ Cannot connect to Ollama at {client.base_url}[/bold red]")
+        sys.exit(1)
+
+    voice = VoiceEngine()
+    if not voice.is_supported():
+        console.print("[bold red]❌ Voice engine dependencies not available.[/bold red]")
+        console.print("Please ensure [green]sounddevice[/green], [green]speech_recognition[/green], and [green]numpy[/green] are installed.")
+        return
+
+    team = MultiAgentTeam(
+        workspace_dir=workspace,
+        config=cfg,
+        model_name=model,
+        auto_approve=True,
+    )
+    profile = team.model_profile
+    current_agent = team.architect
+
+    voice_banner = (
+        f"🎙️  [bold cyan]ELECTORN AI — HANDS-FREE VOICE ASSISTANT[/bold cyan]\n"
+        f"Active Neural Engine: [bold green]{profile.name}[/bold green] ({profile.description})\n"
+        f"Active Persona: 🧠 [bold yellow]{current_agent.name}[/bold yellow] ({current_agent.role})\n"
+        f"Voice Output: [bold magenta]Female Persona (Natural TTS)[/bold magenta]\n"
+        f"Status: [bold green]Voice In (Mic) & Voice Out (Speaker) Active[/bold green]\n\n"
+        f"[dim]Press [bold]Enter[/bold] to speak with your microphone, or type your query directly.\n"
+        f"Type [bold]exit[/bold] or press [bold]Ctrl+C[/bold] to return to terminal.[/dim]"
+    )
+    console.print(Panel(voice_banner, border_style="cyan", padding=(1, 2)))
+    console.print("")
+
+    conversation_history: list[dict[str, str]] = []
+
+    # Spoken greeting
+    voice.speak("Electorn Voice Assistant activated. Press Enter and speak.", async_mode=True)
+
+    while True:
+        try:
+            console.print("[bold yellow]Press Enter to speak (or type a message):[/bold yellow] ", end="")
+            user_input = input().strip()
+
+            if user_input.lower() in ("/exit", "/quit", "exit", "quit"):
+                voice.speak("Voice assistant closed. Goodbye!", async_mode=False)
+                console.print("\n[yellow]Voice mode closed. Until next time! 🚀[/yellow]")
+                break
+
+            query = ""
+            if user_input:
+                query = user_input
+            else:
+                def mic_cb(msg: str) -> None:
+                    console.print(f"[dim cyan]{msg}[/dim cyan]")
+
+                query = voice.listen_and_transcribe(record_seconds=5.0, status_cb=mic_cb) or ""
+                if not query:
+                    console.print("[dim yellow]No clear speech detected. Press Enter to try again.[/dim yellow]\n")
+                    continue
+
+            console.print(f"\n[bold cyan]You (Voice)[/bold cyan] ❯ [white]{query}[/white]")
+
+            conversation_history.append({"role": "user", "content": query})
+            if len(conversation_history) > 8:
+                conversation_history = conversation_history[-8:]
+
+            chat_system = (
+                f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Voice Assistant mode. "
+                f"You are communicating verbally with the user. "
+                f"Keep answers clear, concise, conversational, and direct (2-4 sentences where possible) "
+                f"so they are comfortable and natural to listen to aloud. Avoid reading long code blocks."
+            )
+
+            streamed_chunks: list[str] = []
+            console.print(f"\n🧠 [bold yellow]{current_agent.name}[/bold yellow] ❯ ", end="")
+            try:
+                with console.status("[cyan]Thinking...[/cyan]", spinner="dots"):
+                    token_gen = current_agent.stream_ask(query, conversation_history[:-1], system_override=chat_system)
+                    try:
+                        first_chunk = next(token_gen)
+                    except StopIteration:
+                        first_chunk = ""
+
+                if first_chunk:
+                    console.print(first_chunk, end="", highlight=False)
+                    streamed_chunks.append(first_chunk)
+
+                for chunk in token_gen:
+                    console.print(chunk, end="", highlight=False)
+                    streamed_chunks.append(chunk)
+                    if hasattr(sys.stdout, "flush"):
+                        sys.stdout.flush()
+            except Exception:
+                resp = current_agent.ask(query)
+                console.print(resp.content, end="")
+                streamed_chunks = [resp.content]
+
+            full_text = "".join(streamed_chunks).strip()
+            console.print("\n")
+
+            if full_text:
+                conversation_history.append({"role": "assistant", "content": full_text})
+                # Speak back to user
+                voice.speak(full_text, async_mode=False)
+
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Voice mode closed.[/yellow]")
+            break
+        except Exception as err:
+            console.print(f"[bold red]Voice Error:[/bold red] {err}\n")
 
 
 def main() -> None:
