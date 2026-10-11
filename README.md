@@ -1,4 +1,4 @@
-# ⚡ Electorn AI — Autonomous AI Software Development CLI
+# ⚡ Electorn AI — Autonomous AI Software Development Engine
 
 > **One CLI. A Complete AI Development Team.**  
 > *Engineered as part of [HS AI Solutions](https://hs-ai-studio.onrender.com/).*
@@ -8,157 +8,284 @@
 [![Engine](https://img.shields.io/badge/Engine-Ollama%20%2B%20Cloud-black.svg)](https://ollama.ai)
 [![Studio](https://img.shields.io/badge/Studio-HS%20AI%20Solutions-blueviolet.svg)](https://hs-ai-studio.onrender.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/Tests-31%20Passed-green.svg)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-35%20Passed-green.svg)](#testing)
 
 ---
 
-## 🌟 Overview
+## 🌟 What is Electorn AI?
 
-**Electorn AI** turns your terminal into a full, private, autonomous software development engineering department. It accepts natural-language software specifications (e.g. *"Build a job recommendation platform with FastAPI and SQLite"*) and executes an end-to-end engineering workflow:
+**Electorn AI** is not a chatbot that simply prints code snippets to the screen. It is an **autonomous software engineering and development engine** designed to plan, build, test, repair, and run complete, multi-file software applications directly on your computer.
 
-1. **Requirements & Architecture** — Discovers requirements, plans file trees, and selects optimal stacks.
-2. **Autonomous Multi-Agent Generation** — Sequential execution across specialized roles (Architect, Database, Backend, Frontend, DevOps, QA).
-3. **Task Planning Engine** — Tracks verifiable task states (`PENDING`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `BLOCKED`, `CANCELLED`) with terminal progress badges.
-4. **Codebase Intelligence & Security** — Inspects repositories, maps routes and data models, and detects hardcoded secrets.
-5. **Self-Healing Code Loop** — Catches AST syntax errors and test failures, performs targeted patch generation, and rolls back if patches degrade the project.
-6. **Change Management & Safe Rollbacks** — Automatic checkpoints, unified diffs, and instant rollback.
-7. **Multi-Mode Runtimes** — Seamlessly operates across **Local** (Ollama offline), **Cloud** (API key), and **Auto** modes.
-8. **Live Autonomous Web Search** — Queries web documentation and real-time knowledge with zero API keys required.
+When you give Electorn a natural-language description (e.g. *"Build a job portal REST API with FastAPI and SQLite"*), Electorn:
 
----
-
-## 🛠️ Complete CLI Command Reference
-
-| Command | Usage | Description |
-| :--- | :--- | :--- |
-| `build` / `run` | `electorn build "..."` | Full autonomous application generation from natural-language prompts. |
-| `analyze` | `electorn analyze [path]` | Multi-file codebase discovery, file counts, entry points, routes, and secret scanner. |
-| `explain` | `electorn explain [path]` | Explains project architecture, design decisions, and data workflows. |
-| `fix` | `electorn fix` | Autonomous self-repair of syntax errors and failing unit tests. |
-| `test` | `electorn test` | Executes quality verification and produces honest status reports. |
-| `refactor` | `electorn refactor <file>` | Targeted refactoring of components with automated pre-refactor checkpoints. |
-| `docs` | `electorn docs` | Generates comprehensive README and architecture documentation. |
-| `diff` | `electorn diff [checkpoint_id]` | Shows unified syntax-highlighted diff against recent checkpoints. |
-| `checkpoint` | `electorn checkpoint "msg"` | Creates recoverable snapshot of the workspace in `.electorn/checkpoints/`. |
-| `rollback` | `electorn rollback [id]` | Safely restores workspace files from a previous snapshot. |
-| `status` | `electorn status` | Displays workspace files, active model, checkpoints, and engineering memory. |
-| `mode` | `electorn mode <local\|cloud\|auto>` | Inspects or switches active operating mode. |
-| `config` | `electorn config` | Displays and audits current `.electorn.yaml` settings. |
-| `version` | `electorn version` | Displays Electorn AI version and studio metadata. |
-| `doctor` | `electorn doctor` | Audits system runtimes, Python, Ollama, Git, Node, and Docker. |
-| `models` | `electorn models` | Inspects installed Ollama models and displays suitability profiles. |
-| `chat` | `electorn chat` | Futuristic multi-agent conversational studio with token streaming and web search. |
-| `studio` | `electorn studio` | Explores HS AI Solutions product ecosystem and live deployments. |
+1. **Analyzes requirements** and creates an architectural specification.
+2. **Scaffolds directories and files** cleanly in your workspace.
+3. **Generates connected source code** across database models, backend APIs, frontend UI, tests, and configuration.
+4. **Executes real development commands** (e.g. `pip install -r requirements.txt`, `npm install`) through its dedicated Windows PowerShell automation engine.
+5. **Runs automated test suites** (`pytest`), catches syntax or assertion errors, and **iteratively self-repairs** failing code.
+6. **Performs security scans** to ensure no credentials or secrets are exposed.
+7. **Launches live background servers** and automatically detects active ports (`http://localhost:8000`) for instant live preview.
 
 ---
 
-## 🚀 Installation & Setup
+## 🚀 Quick Start Guide
 
-### 1. Install via PyPI or Local Development
+### 1. Installation
+
+Install via PyPI:
 ```bash
-# Install package
 pip install ElectronAi
+```
 
-# Or clone and install editable
+Or clone and install in editable mode for local development:
+```bash
 git clone https://github.com/25it038-beep/Electron.git
 cd Electron
 pip install -e .
 ```
 
+> **Note for Windows Users:** If your Python Scripts folder is not on your system PATH, you can invoke Electorn anywhere via `python -m electorn` or `py -m electorn`.
+
 ### 2. Verify Your Environment
+
+Run the built-in system auditor to check installed runtimes:
 ```bash
 electorn doctor
 ```
+This inspects your **Operating System, Python version, Ollama Engine, Git, Node.js, PowerShell (5.1 or Core), and Docker**.
 
-### 3. Start Local Inference (Ollama)
+### 3. Connect Local AI Inference (Ollama)
+
+Electorn is powered locally by Ollama with 100% data privacy:
 ```bash
+# Start Ollama engine
 ollama serve
-ollama pull llama3.2:1b
+
+# Pull a coding model (recommended: llama3.2:1b, llama3.2:3b, or qwen2.5-coder:7b)
+ollama pull llama3.2
 ```
 
 ---
 
-## 💡 Usage Examples
+## 📖 Complete Usage Guide
 
-### 1. Generating an Application
-```bash
-electorn build "Build a job portal REST API with FastAPI and SQLite for applicant and recruiter workflows"
-```
+Electorn features both an **interactive terminal menu** and direct **one-line CLI commands**.
 
-Terminal Output:
+### Option A: Interactive Mode (Simply run `electorn`)
+
+If you run `electorn` without arguments, an interactive terminal launcher appears:
+
 ```text
-ELECTORN DEVELOPMENT AGENT
-Project: job-portal
+⚡ ELECTORN AI — One CLI. A Complete AI Development Team.
+v0.1.0 | Powered by Ollama Local AI Engine
+Part of HS AI Solutions: https://hs-ai-studio.onrender.com/
 
-[PASS] Requirements analyzed
-[PASS] Project structure created
-[PASS] Database & persistence layer generated
-[PASS] Backend API and services generated
-[PASS] Automated test suite generated
-[PASS] Dependency and configuration validation
-[PASS] Code verification & quality assurance
+Choose your development mode:
+  1. 🚀 Autonomous App Creator — Build a full application, generate files, run tests & self-repair
+  2. 💬 Futuristic AI Chat Studio — Interactive multi-agent terminal with code streaming & web search
+  3. 🩺 System Doctor — Audit developer runtimes, Ollama engine & models
+  4. 🌐 HS AI Solutions Studio — Explore product ecosystem
+  0. ❌ Exit
 ```
 
-### 2. Inspecting and Auditing an Existing Codebase
+---
+
+### Option B: Command-Line Interface (Full Command Reference)
+
+| Command | Syntax | What It Does |
+| :--- | :--- | :--- |
+| **`build` / `run`** | `electorn "..."` or `electorn run "..."` | Builds a complete application end-to-end from prompt. |
+| **`preview`** | `electorn preview` | Starts a background development server and reports active URL. |
+| **`stop`** | `electorn stop` | Terminates all background dev servers started in the workspace. |
+| **`analyze`** | `electorn analyze [path]` | Inspects codebase files, entry points, endpoints, and credentials. |
+| **`explain`** | `electorn explain [path]` | Explains architecture, entry points, and workflows of a project/file. |
+| **`fix`** | `electorn fix` | Scans workspace for syntax errors and failing tests, then repairs them. |
+| **`test`** | `electorn test` | Executes test suites and outputs a structured Quality Validation Report. |
+| **`refactor`** | `electorn refactor <file> -i "..."` | Rewrites a specific file for better architecture with auto-checkpoints. |
+| **`docs`** | `electorn docs` | Generates comprehensive README and architecture documentation. |
+| **`diff`** | `electorn diff [checkpoint_id]` | Shows unified syntax-highlighted diff against recent checkpoints. |
+| **`checkpoint`** | `electorn checkpoint "message"` | Creates an instant, recoverable snapshot in `.electorn/checkpoints/`. |
+| **`rollback`** | `electorn rollback [id]` | Safely restores workspace files to a previous snapshot. |
+| **`status`** | `electorn status` | Displays workspace files, active model, checkpoints, and memory. |
+| **`mode`** | `electorn mode <local\|cloud\|auto>` | Switches operating mode (local Ollama, cloud API, or auto). |
+| **`config`** | `electorn config` | Displays and audits current `.electorn.yaml` configuration. |
+| **`doctor`** | `electorn doctor` | Checks developer tools (Python, Node.js, PowerShell, Git, Docker, Ollama). |
+| **`models`** | `electorn models` | Lists installed Ollama models with parameter sizes and tier ratings. |
+| **`chat`** | `electorn chat` | Futuristic multi-agent conversational studio with live web search. |
+| **`studio`** | `electorn studio` | Explores HS AI Solutions product ecosystem and live deployments. |
+| **`version`** | `electorn version` | Displays Electorn AI version and studio metadata. |
+
+---
+
+## 🛠️ Step-by-Step Command Walkthroughs
+
+### 1. Building a Full Application (`electorn run` or `electorn "<prompt>"`)
+
+Build an entire application autonomously:
+
+```bash
+electorn "Build a REST API with FastAPI and SQLite for a job portal with applicant and recruiter endpoints"
+```
+
+To automatically install dependencies, run tests, and launch a live preview server on completion, pass `--preview` (or `-p`):
+
+```bash
+electorn "Build a responsive notes app with Flask and SQLite" --preview
+```
+
+**What Happens Under the Hood:**
+* **Section 5 Task Planner:** Renders real-time stage badges:
+  ```text
+  ELECTORN APPLICATION ENGINE
+  ========================================
+  Project: job-portal-api
+  Workspace: C:\Users\YourUser\Projects\job-portal
+
+  [PASS] Requirements analyzed
+  [PASS] Project structure created
+  [PASS] Database & persistence layer generated
+  [PASS] Backend API and services generated
+  [PASS] Automated test suite generated
+  [PASS] Dependency and configuration validation
+  [RUN ] Code verification & quality assurance
+  ```
+* **Section 8 Validation Report:** Outputs an honest validation summary:
+  ```text
+  APPLICATION VALIDATION
+  ========================================
+  Files generated:       6
+  Dependencies:          Installed via pip
+  Syntax validation:     Passed
+  Unit tests:            Passed
+  Integration tests:     Passed
+  Production build:      Passed
+  Security checks:       Passed (No credentials exposed)
+
+  Final status:
+  READY FOR REVIEW
+  ```
+
+---
+
+### 2. Managing Background Development Servers (`preview` & `stop`)
+
+Electorn can run dev servers in the background without locking your terminal:
+
+```bash
+# Start background dev server (auto-detects main.py, app.py, or npm start)
+electorn preview
+
+# Or specify a custom command
+electorn preview -c "uvicorn app:app --port 8000"
+```
+Electorn polls startup logs and outputs:
+```text
+🚀 Starting background dev server: uvicorn app:app --port 8000...
+✨ Server live at: http://localhost:8000 (PID: 14892)
+```
+
+To stop all running servers in the workspace:
+```bash
+electorn stop
+```
+
+---
+
+### 3. Auditing & Inspecting a Codebase (`analyze` & `explain`)
+
+Audit any repository or folder for tech stacks, database models, API endpoints, and potential credential leaks:
+
 ```bash
 electorn analyze .
 ```
-Audits file counts, languages, routes, ORM models, entry points, and scans for hardcoded secrets or exposed API keys.
 
-### 3. Checkpoints & Rollbacks
+To generate an architectural explanation of the project or an individual source file:
 ```bash
-# Create safe snapshot
-electorn checkpoint "Before database migration"
-
-# Inspect changes
-electorn diff
-
-# Restore snapshot if something breaks
-electorn rollback
+electorn explain main.py
 ```
-
-### 4. Interactive Chat Studio with Web Search
-Launch the multi-agent chat interface:
-```bash
-electorn chat
-```
-Futuristic Studio Commands:
-* `/search <query>` — Autonomous live web search with citations.
-* `/web <prompt>` — Queries the web and feeds live findings to the agent to synthesize answers.
-* `/agent <name>` — Switch personas dynamically (`architect`, `backend`, `frontend`, `database`, `qa`, `devops`).
-* `/model [name]` — Inspect or switch active neural model on the fly.
-* `/files` — Display workspace file tree.
-* `/read <file>` — Inspect workspace file contents.
-* `/build <prompt>` — Launch full autonomous generation directly from chat.
 
 ---
 
-## 🔒 Security & Sandboxing Guardrails
+### 4. Autonomous Bug Fixing & Self-Repair (`fix`)
 
-* **Workspace Sandbox** — All autonomous file operations are strictly bound to the target workspace; path traversal attempts outside the boundary are rejected.
-* **Argument Array Subprocess Security** — Shell execution utilizes explicit argument arrays where possible, preventing arbitrary shell injection.
-* **Interactive Approvals** — Modifying existing files or executing system commands requires confirmation unless `--yes` is explicitly configured.
-* **Secret Scanner** — Codebase analysis actively scans for credential leakage and blocks private keys from LLM prompts.
+If a codebase has syntax errors or failing tests, Electorn can automatically diagnose and fix them:
+
+```bash
+electorn fix
+```
+Electorn runs an AST static syntax check, discovers tests via `pytest`, extracts failing stack traces, generates targeted patches, and verifies that tests pass before committing.
+
+---
+
+### 5. Checkpoints & Instant Rollback (`checkpoint`, `diff`, `rollback`)
+
+Electorn protects your workspace with zero-overhead snapshot management:
+
+```bash
+# 1. Create a snapshot before making big changes
+electorn checkpoint "Before switching to PostgreSQL"
+
+# 2. View what changed since the last snapshot
+electorn diff
+
+# 3. Roll back immediately if code breaks
+electorn rollback
+```
+
+---
+
+### 6. Interactive Futuristic Chat Studio with Live Web Search (`chat`)
+
+Launch the multi-agent conversational studio:
+
+```bash
+electorn chat
+```
+
+#### Futuristic Chat Features & Slash Commands:
+* **Token Streaming:** Real-time generation directly from Ollama.
+* **Autonomous Web Search:** Type `/search <query>` to search DuckDuckGo without an API key.
+* **Web-Augmented Synthesis:** Type `/web <prompt>` to search the web and synthesize an answer with citations.
+* **Agent Switching:** Type `/agent backend` or `/agent architect` to switch specialized AI personas on the fly.
+* **Live File Inspector:** Type `/files` to see the workspace tree or `/read <filename>` to inspect code.
+* **Instant Application Pipeline:** Type `/build <prompt>` directly inside chat to trigger full application creation.
+
+---
+
+## 🔒 Security & Windows Guardrails
+
+Electorn is engineered with production-grade safety policies:
+
+* **Workspace Sandbox:** File operations are strictly bound to the target directory. Attempts to modify files outside the workspace are blocked.
+* **Permission Engine:** Routine development operations (creating files, running `pip install`, `npm install`, `pytest`) are permitted by default for seamless flow. High-risk system actions (e.g. disk alteration, firewall edits, registry tweaks) require explicit confirmation.
+* **PowerShell Execution Security:** Commands run using PowerShell's `-NoProfile -NonInteractive -ExecutionPolicy Bypass` flags with process tree isolation.
+* **Credential Hygiene:** An automated regex scanner checks generated code for exposed API keys, private tokens, and credentials before declaring completion.
 
 ---
 
 ## 🧪 Testing
 
-Run the automated test suite:
+Run the automated test suite locally:
 ```bash
-pytest -v
+py -m pytest -v
 ```
-All **31 automated tests** covering agents, task planner, codebase analyzer, checkpoints, file manager, runner, web search, providers, and CLI commands pass with 100% reliability.
+**All 35 unit and integration tests pass with 100% reliability**, covering:
+* PowerShell execution engine & background process management
+* End-to-end ApplicationBuilder orchestration
+* Multi-agent file generation and streaming
+* AST syntax analysis and self-repair loops
+* Checkpoints, diffing, and rollbacks
+* CLI command routing and environment auditing
 
 ---
 
 ## 🌐 HS AI Solutions Ecosystem
 
-Electorn AI is part of **[HS AI Solutions](https://hs-ai-studio.onrender.com/)**:
+Electorn AI is part of the **[HS AI Solutions](https://hs-ai-studio.onrender.com/)** platform:
 
 | Product | Focus | Live Access |
 | :--- | :--- | :--- |
-| **⚡ Electorn AI** | Autonomous Dev Team CLI | Local CLI (`electorn`) / [PyPI](https://pypi.org/project/ElectronAi/) |
+| **⚡ Electorn AI** | Autonomous Dev Team Engine | Local CLI (`electorn`) / [PyPI](https://pypi.org/project/ElectronAi/) |
 | **🛡️ Pendulum** | Stealth Private Desktop AI Browser | [Details](https://hs-ai-studio.onrender.com/products/pendulum) |
 | **🎨 Lumina** | AI Presentation Architecture Studio | [Launch](https://lumina-pghe.onrender.com/) |
 | **🤖 HSBot** | Multi-Model Unified Chat Workspace | [Launch](https://hs-chatbot-3.onrender.com/) |
@@ -169,9 +296,9 @@ Electorn AI is part of **[HS AI Solutions](https://hs-ai-studio.onrender.com/)**
 
 ---
 
-## 👨‍💻 Creator & Support
+## 👨‍💻 Creator & License
 
 * **Studio:** [https://hs-ai-studio.onrender.com/](https://hs-ai-studio.onrender.com/)
 * **Author:** Harshan Seliyan
 * **Email:** [harshanseliyan28@gmail.com](mailto:harshanseliyan28@gmail.com)
-* **License:** MIT
+* **License:** [MIT](https://opensource.org/licenses/MIT)
