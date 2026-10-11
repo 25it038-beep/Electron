@@ -1,0 +1,29 @@
+import tempfile
+from electorn.execution.environment import EnvironmentDetector
+from electorn.execution.runner import CommandRunner
+from electorn.workspace.permissions import PermissionManager
+
+
+def test_environment_detector():
+    env = EnvironmentDetector.detect()
+    assert env.python_version != ""
+    assert env.os_system != ""
+
+
+def test_command_runner():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        runner = CommandRunner(tmp_dir, permissions=PermissionManager(auto_approve=True))
+        # Run simple Python command
+        res = runner.run('python -c "print(123 + 456)"')
+        assert res.is_success is True
+        assert "579" in res.stdout
+        assert res.returncode == 0
+
+
+def test_command_runner_permission_rejection():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # Prompt function that rejects
+        runner = CommandRunner(tmp_dir, permissions=PermissionManager(auto_approve=False, prompt_fn=lambda _: False))
+        res = runner.run("python -c 'print(1)'")
+        assert res.permitted is False
+        assert res.is_success is False

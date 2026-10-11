@@ -1,0 +1,37 @@
+from typer.testing import CliRunner
+from electorn.cli import app
+
+runner = CliRunner()
+
+
+def test_cli_help():
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "Electorn AI" in result.output
+    assert "doctor" in result.output
+    assert "models" in result.output
+
+
+def test_cli_doctor():
+    result = runner.invoke(app, ["doctor"])
+    assert result.exit_code == 0
+    assert "System & Developer Environment Audit" in result.output
+    assert "Operating System" in result.output
+
+
+def test_cli_init_and_run_mock():
+    with runner.isolated_filesystem():
+        # Init
+        init_res = runner.invoke(app, ["init"])
+        assert init_res.exit_code == 0
+        assert "Created Electorn configuration" in init_res.output
+
+        # Run mock via explicit 'run' command
+        run_res = runner.invoke(app, ["run", "Build a minimal calculator", "--mock", "-y"])
+        assert run_res.exit_code == 0
+        assert "Development Workflow Completed Successfully" in run_res.output
+
+        # Run mock via direct prompt (electorn "<prompt>")
+        direct_res = runner.invoke(app, ["Build a second tool", "--mock", "-y"])
+        assert direct_res.exit_code == 0
+        assert "Development Workflow Completed Successfully" in direct_res.output

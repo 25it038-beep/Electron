@@ -1,0 +1,27 @@
+runtime:
+  ollama_base_url: http://localhost:11434
+  model: null
+  fallback_model: llama3.2:latest
+  timeout_seconds: 180
+  temperature: 0.2
+  context_tokens: 8192
+  keep_alive: 5m
+orchestration:
+  sequential_execution: true
+  max_repair_attempts: 3
+  auto_install_deps: false
+  allow_command_execution: true
+  verbosity: 1
+workspace:
+  workspace_dir: .
+  ignore_patterns:
+  - .git
+  - __pycache__
+  - .pytest_cache
+  - node_modules
+  - .venv
+  - venv
+  - dist
+  - build
+  - .electorn
+  backup_before_edit: true
