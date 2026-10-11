@@ -36,6 +36,14 @@ class WorkflowPipeline:
         state = ProjectState(prompt=user_prompt)
 
         # ---------------------------------------------------------
+        # Step 0: Safe Workspace Checkpoint
+        # ---------------------------------------------------------
+        try:
+            self.team.checkpoints.create_checkpoint(f"Pre-build snapshot for: {user_prompt[:50]}")
+        except Exception:
+            pass
+
+        # ---------------------------------------------------------
         # Step 1: System Architecture & Planning (Architect)
         # ---------------------------------------------------------
         if on_step_start:
@@ -43,6 +51,15 @@ class WorkflowPipeline:
 
         spec: ProjectSpecification = self.team.architect.design_system(user_prompt)
         state.specification = spec
+
+        # Record engineering context in persistent project memory
+        self.team.project_memory.update(
+            purpose=spec.overview or user_prompt,
+            stack_updates=spec.tech_stack,
+            decision=f"Designed architecture with {len(spec.file_manifest)} components",
+            commands={"run": spec.run_command, "test": spec.test_command},
+        )
+
         self.team.history.record_action(
             agent_name=self.team.architect.name,
             role=self.team.architect.role,

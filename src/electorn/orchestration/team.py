@@ -20,11 +20,14 @@ from electorn.runtime.model_selector import ModelProfile, ModelSelector
 from electorn.runtime.ollama_client import OllamaClient
 from electorn.storage.config import Config
 from electorn.storage.history import SessionHistory
+from electorn.storage.project_memory import ProjectMemory
 from electorn.verification.self_repair import SelfRepairEngine
 from electorn.verification.syntax_checker import SyntaxChecker
 from electorn.verification.test_runner import TestRunner
+from electorn.workspace.checkpoints import CheckpointManager
 from electorn.workspace.file_manager import FileManager, FileOperationResult
 from electorn.workspace.permissions import PermissionManager
+from electorn.orchestration.planner import TaskPlanner
 
 
 class MultiAgentTeam:
@@ -79,8 +82,11 @@ class MultiAgentTeam:
             max_attempts=self.config.orchestration.max_repair_attempts,
         )
 
-        # Memory and Context Manager
+        # Memory, Checkpoint, and Task Planner
         self.memory = MemoryManager(self.file_manager)
+        self.checkpoints = CheckpointManager(self.workspace_dir, ignore_patterns=self.config.workspace.ignore_patterns)
+        self.project_memory = ProjectMemory(self.workspace_dir)
+        self.planner = TaskPlanner()
 
         # Session Audit Tracking
         self.session_id = f"electorn-{uuid.uuid4().hex[:8]}"

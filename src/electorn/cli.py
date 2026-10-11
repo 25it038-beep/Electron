@@ -19,12 +19,19 @@ from rich.tree import Tree
 
 from typer.core import TyperGroup
 from electorn import __version__
+from electorn.agents.base import BaseAgent
+from electorn.analysis.codebase_analyzer import CodebaseAnalyzer, CodebaseSummary
 from electorn.execution.environment import EnvironmentDetector
 from electorn.orchestration.team import MultiAgentTeam
-from electorn.runtime.model_selector import ModelSelector
-from electorn.runtime.ollama_client import OllamaClient
+from electorn.runtime.model_selector import ModelProfile, ModelSelector
+from electorn.runtime.ollama_client import OllamaClient, OllamaModelInfo
+from electorn.runtime.web_search import SearchResult, WebSearchEngine
 from electorn.storage.config import Config, load_config, save_config
+from electorn.storage.project_memory import ProjectMemory
+from electorn.verification.quality_report import ExecutedCheck, QualityReport
+from electorn.workspace.checkpoints import CheckpointManager
 from electorn.workspace.file_manager import FileOperationResult
+from electorn.workspace.project_state import ProjectState
 
 
 # Force UTF-8 on Windows terminals to support emojis and rich unicode formatting
@@ -454,6 +461,517 @@ def studio_command() -> None:
     )
 
 
+@app.command(name="build", help="Build a complete application from a natural language prompt.")
+def build_command(
+    prompt: str = typer.Argument(
+        ...,
+        help="Description of application or feature to develop",
+    ),
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Target workspace directory for generated code",
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help="Target AI model name",
+    ),
+    auto_approve: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Auto-approve file creation and executions",
+    ),
+    mock: bool = typer.Option(
+        False,
+        "--mock",
+        hidden=True,
+        help="Mock mode for automated test suites",
+    ),
+) -> None:
+    """Build application from natural language prompt."""
+    run_development_pipeline(
+        prompt=prompt,
+        workspace=workspace,
+        model=model,
+        auto_approve=auto_approve,
+        mock=mock,
+    )
+
+
+@app.command(name="analyze", help="Inspect and analyze existing project structure, dependencies, and security.")
+def analyze_command(
+    path: Path = typer.Argument(
+        Path("."),
+        help="Target project directory to analyze",
+    ),
+) -> None:
+    """Multi-file codebase intelligence and security analysis."""
+    print_banner()
+    analyzer = CodebaseAnalyzer(path)
+    summary = analyzer.analyze()
+
+    table = Table(title=f"📊 Codebase Intelligence: {summary.root_dir}", border_style="cyan")
+    table.add_column("Metric", style="bold white")
+    table.add_column("Details", style="cyan")
+
+    table.add_row("Total Files", str(summary.total_files))
+    table.add_row("Total Lines of Code", f"~{summary.total_lines:,}")
+    table.add_row("Primary Tech Stack", ", ".join(summary.primary_tech_stack) or "General")
+    table.add_row("Languages", ", ".join(f"{k} ({v})" for k, v in summary.languages.items()) or "None detected")
+    table.add_row("Entry Points", ", ".join(summary.entry_points[:4]) or "None detected")
+    table.add_row("Configuration Files", ", ".join(summary.configuration_files[:4]) or "None")
+    table.add_row("Routes / Endpoints", str(len(summary.route_endpoints)))
+    table.add_row("Database Models", str(len(summary.database_models)))
+    table.add_row("Test Files", str(len(summary.test_files)))
+
+    console.print(table)
+    console.print("")
+
+    if summary.security_findings:
+        sec_table = Table(title="⚠️ Security Exposures Detected", border_style="red")
+        sec_table.add_column("File", style="yellow")
+        sec_table.add_column("Line", style="dim")
+        sec_table.add_column("Rule", style="bold red")
+        sec_table.add_column("Preview", style="white")
+        for finding in summary.security_findings:
+            sec_table.add_row(finding.file_path, str(finding.line_number), finding.rule, finding.snippet_preview)
+        console.print(sec_table)
+        console.print("")
+    else:
+        console.print("[bold green]✔ Security Hygiene: No exposed API keys or credentials detected.[/bold green]\n")
+
+
+@app.command(name="explain", help="Explain architecture, entry points, and workflows of a project or file.")
+def explain_command(
+    path: Path = typer.Argument(
+        Path("."),
+        help="Target directory or file to explain",
+    ),
+) -> None:
+    """Analyze and explain project architecture."""
+    print_banner()
+    if path.is_file():
+        text = path.read_text(encoding="utf-8", errors="replace")
+        console.print(Panel(text[:2000], title=f"📄 {path.name}", border_style="cyan"))
+        console.print(f"[bold cyan]File Summary:[/bold cyan] {len(text.splitlines())} lines | {len(text)} bytes\n")
+        return
+
+    analyzer = CodebaseAnalyzer(path)
+    summary = analyzer.analyze()
+    console.print(f"🏛️ [bold cyan]Architecture Overview for {path.resolve().name}:[/bold cyan]")
+    console.print(f"• [bold white]Tech Stack:[/bold white] {', '.join(summary.primary_tech_stack) or 'Multi-language'}")
+    console.print(f"• [bold white]Entry Points:[/bold white] {', '.join(summary.entry_points) or 'Not detected'}")
+    console.print(f"• [bold white]Key Routes:[/bold white] {', '.join(summary.route_endpoints[:5]) or 'No routes found'}")
+    console.print(f"• [bold white]Data Models:[/bold white] {', '.join(summary.database_models[:5]) or 'No ORM models found'}")
+    console.print(f"• [bold white]Test Coverage:[/bold white] {len(summary.test_files)} test files discovered\n")
+
+
+@app.command(name="fix", help="Detect syntax errors and test failures, and autonomously repair them.")
+def fix_command(
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Workspace directory to repair",
+    ),
+) -> None:
+    """Autonomous self-repair of syntax errors and failing tests."""
+    print_banner()
+    cfg = load_config(workspace)
+    team = MultiAgentTeam(workspace_dir=workspace, config=cfg, auto_approve=True)
+
+    console.print(f"🔍 [bold cyan]Auditing workspace for errors:[/bold cyan] {team.workspace_dir}\n")
+    # 1. Syntax check
+    files = team.file_manager.list_files()
+    syntax_results = team.syntax_checker.check_all_files(files)
+    bad_syntax = [r.file_path for r in syntax_results if not r.is_valid]
+
+    if bad_syntax:
+        console.print(f"⚠️ [yellow]Found {len(bad_syntax)} syntax errors in: {', '.join(bad_syntax)}[/yellow]")
+        console.print("🔧 Initiating self-repair on syntax...")
+        team.repair_engine.repair_syntax(
+            repair_agent=team.backend,
+            state=ProjectState(prompt="repair"),
+            failing_files=bad_syntax,
+            status_cb=lambda msg: console.print(f"  {msg}"),
+        )
+    else:
+        console.print("✔ [green]All workspace files passed syntax verification.[/green]")
+
+    # 2. Test runner
+    console.print("\n🧪 [bold cyan]Running automated test discovery...[/bold cyan]")
+    test_res = team.test_runner.run_tests("pytest")
+    if not test_res.passed:
+        console.print("⚠️ [yellow]Tests failed. Running test repair loop...[/yellow]")
+        success = team.repair_engine.repair_test_failures(
+            repair_agent=team.backend,
+            state=ProjectState(prompt="repair"),
+            test_result=test_res,
+            status_cb=lambda msg: console.print(f"  {msg}"),
+        )
+        if success:
+            console.print("✨ [bold green]Self-repair succeeded! All tests passing.[/bold green]\n")
+        else:
+            console.print("❌ [bold red]Self-repair could not resolve all test failures. Check diff or rollback.[/bold red]\n")
+    else:
+        console.print("✔ [bold green]All automated tests passed successfully![/bold green]\n")
+
+
+@app.command(name="test", help="Run comprehensive quality verification checks and test suites.")
+def test_command(
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Workspace directory to verify",
+    ),
+    cmd: Optional[str] = typer.Option(
+        None,
+        "--command",
+        "-c",
+        help="Custom test command (defaults to pytest)",
+    ),
+) -> None:
+    """Run full quality verification suite and generate honest quality report."""
+    print_banner()
+    cfg = load_config(workspace)
+    team = MultiAgentTeam(workspace_dir=workspace, config=cfg, auto_approve=True)
+
+    report = QualityReport(project_name=team.workspace_dir.name)
+
+    # 1. Syntax check
+    files = team.file_manager.list_files()
+    syntax_results = team.syntax_checker.check_all_files(files)
+    for r in syntax_results:
+        if not r.is_valid:
+            report.syntax_errors.append(f"{r.file_path}: {r.error_message}")
+
+    # 2. Test run
+    test_cmd = cmd or "pytest"
+    test_res = team.test_runner.run_tests(test_cmd)
+    report.executed_checks.append(
+        ExecutedCheck(
+            name="Automated Test Suite",
+            command_or_action=test_cmd,
+            exit_code=0 if test_res.passed else 1,
+            output_snippet=test_res.raw_output.strip()[-100:] if test_res.raw_output else "No output",
+            passed=test_res.passed,
+        )
+    )
+    report.tests_passed = test_res.passed_tests
+    report.tests_failed = test_res.failed_tests
+
+    # 3. Security scan
+    analyzer = CodebaseAnalyzer(workspace)
+    summary = analyzer.analyze()
+    for s in summary.security_findings:
+        report.security_warnings.append(f"{s.file_path}:{s.line_number} - {s.rule}")
+
+    console.print(report.format_terminal_table())
+    console.print(f"\nFinal Quality Status: [bold]{report.final_status}[/bold]\n")
+
+
+@app.command(name="refactor", help="Refactor codebase components for clean architecture and best practices.")
+def refactor_command(
+    file_path: str = typer.Argument(
+        ...,
+        help="Relative path of file to refactor",
+    ),
+    instruction: str = typer.Option(
+        "Refactor to improve code quality, type annotations, and modular design",
+        "--instruction",
+        "-i",
+        help="Refactoring instructions",
+    ),
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Workspace directory",
+    ),
+) -> None:
+    """Targeted refactoring assistant."""
+    print_banner()
+    cfg = load_config(workspace)
+    team = MultiAgentTeam(workspace_dir=workspace, config=cfg, auto_approve=True)
+
+    # Pre-refactor checkpoint
+    cid = team.checkpoints.create_checkpoint(f"Pre-refactor snapshot of {file_path}")
+    console.print(f"💾 Created pre-refactor checkpoint: [dim]{cid}[/dim]")
+
+    try:
+        content = team.file_manager.read_file(file_path)
+    except Exception as e:
+        console.print(f"[bold red]Cannot read target file:[/bold red] {e}")
+        return
+
+    prompt = f"""
+Refactor the file '{file_path}' according to this instruction:
+{instruction}
+
+Current content:
+```
+{content}
+```
+
+Return ONLY the complete refactored source code.
+Format as:
+FILE: {file_path}
+```
+// Refactored code
+```
+"""
+    with console.status("[cyan]Refactoring component...[/cyan]", spinner="dots"):
+        resp = team.backend.ask(prompt)
+        extracted = BaseAgent.extract_files_from_text(resp.content)
+
+    if file_path in extracted:
+        team.file_manager.write_file(file_path, extracted[file_path])
+        console.print(f"✔ [bold green]Refactored and updated:[/bold green] {file_path}")
+    else:
+        code_blocks = BaseAgent.extract_code_blocks(resp.content)
+        if code_blocks:
+            team.file_manager.write_file(file_path, code_blocks[0][1])
+            console.print(f"✔ [bold green]Refactored and updated:[/bold green] {file_path}")
+        else:
+            console.print("[yellow]Could not extract clean refactored code block.[/yellow]")
+    console.print("")
+
+
+@app.command(name="docs", help="Generate or update architecture documentation and README.")
+def docs_command(
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Target workspace directory",
+    ),
+) -> None:
+    """Autonomous documentation generator."""
+    print_banner()
+    cfg = load_config(workspace)
+    team = MultiAgentTeam(workspace_dir=workspace, config=cfg, auto_approve=True)
+
+    analyzer = CodebaseAnalyzer(workspace)
+    summary = analyzer.analyze()
+
+    prompt = f"""
+Generate comprehensive, production-ready README.md documentation for this project:
+- Root directory: {summary.root_dir}
+- Total files: {summary.total_files}
+- Tech Stack: {', '.join(summary.primary_tech_stack)}
+- Entry Points: {', '.join(summary.entry_points)}
+- Endpoints: {', '.join(summary.route_endpoints[:10])}
+- Models: {', '.join(summary.database_models[:10])}
+
+Include:
+1. Project title & high-level architecture overview
+2. Tech stack & prerequisites
+3. Installation & setup steps
+4. Execution & API endpoints overview
+5. Testing guidelines
+
+Format output strictly as:
+FILE: README.md
+```markdown
+# Content
+```
+"""
+    with console.status("[cyan]Generating project documentation...[/cyan]", spinner="dots"):
+        resp = team.devops.ask(prompt)
+        files = BaseAgent.extract_files_from_text(resp.content)
+
+    if "README.md" in files:
+        team.file_manager.write_file("README.md", files["README.md"])
+        console.print("✔ [bold green]Saved README.md documentation successfully![/bold green]\n")
+    else:
+        console.print("[yellow]Could not extract formatted documentation.[/yellow]\n")
+
+
+@app.command(name="diff", help="Show differences between current workspace and recorded checkpoints.")
+def diff_command(
+    checkpoint: Optional[str] = typer.Option(
+        None,
+        "--checkpoint",
+        "-c",
+        help="Specific checkpoint ID (defaults to latest)",
+    ),
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Target workspace directory",
+    ),
+) -> None:
+    """Show unified diff from latest or specified checkpoint."""
+    print_banner()
+    cfg = load_config(workspace)
+    team = MultiAgentTeam(workspace_dir=workspace, config=cfg, auto_approve=True)
+
+    diff_str = team.checkpoints.diff(checkpoint)
+    console.print(Panel(diff_str, title="🔍 Unified Checkpoint Diff", border_style="cyan"))
+    console.print("")
+
+
+@app.command(name="checkpoint", help="Create a recoverable snapshot of the current workspace.")
+def checkpoint_command(
+    message: str = typer.Argument(
+        "Manual snapshot",
+        help="Description message for this checkpoint",
+    ),
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Target workspace directory",
+    ),
+) -> None:
+    """Create safe checkpoint snapshot."""
+    print_banner()
+    cfg = load_config(workspace)
+    team = MultiAgentTeam(workspace_dir=workspace, config=cfg, auto_approve=True)
+
+    cid = team.checkpoints.create_checkpoint(message)
+    console.print(f"✔ [bold green]Created snapshot checkpoint:[/bold green] [bold cyan]{cid}[/bold cyan]")
+    console.print(f"  [dim]Message: '{message}' in {team.workspace_dir}/.electorn/checkpoints/{cid}[/dim]\n")
+
+
+@app.command(name="rollback", help="Restore workspace to a previous checkpoint snapshot.")
+def rollback_command(
+    checkpoint: Optional[str] = typer.Argument(
+        None,
+        help="Checkpoint ID to restore (defaults to latest)",
+    ),
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Target workspace directory",
+    ),
+) -> None:
+    """Restore workspace files from checkpoint."""
+    print_banner()
+    cfg = load_config(workspace)
+    team = MultiAgentTeam(workspace_dir=workspace, config=cfg, auto_approve=True)
+
+    success = team.checkpoints.rollback(checkpoint)
+    if success:
+        console.print(f"✔ [bold green]Successfully rolled back workspace to checkpoint: {checkpoint or 'latest'}[/bold green]\n")
+    else:
+        console.print(f"❌ [bold red]Rollback failed. Checkpoint '{checkpoint}' not found or no checkpoints exist.[/bold red]\n")
+
+
+@app.command(name="status", help="Display workspace status, engineering memory, and active checkpoints.")
+def status_command(
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Target workspace directory",
+    ),
+) -> None:
+    """Show workspace status, engineering memory, and checkpoints."""
+    print_banner()
+    cfg = load_config(workspace)
+    team = MultiAgentTeam(workspace_dir=workspace, config=cfg, auto_approve=True)
+
+    checkpoints = team.checkpoints.list_checkpoints()
+    mem = team.project_memory.data
+
+    table = Table(title=f"📌 Workspace Status: {team.workspace_dir.name}", border_style="cyan")
+    table.add_column("Property", style="bold white")
+    table.add_column("Details", style="cyan")
+
+    table.add_row("Operating Mode", cfg.runtime.mode.upper())
+    table.add_row("Active AI Model", team.model_profile.name)
+    table.add_row("Files in Workspace", str(len(team.file_manager.list_files())))
+    table.add_row("Recorded Checkpoints", str(len(checkpoints)))
+    if checkpoints:
+        table.add_row("Latest Checkpoint", f"{checkpoints[0].id} ({checkpoints[0].iso_time})")
+    table.add_row("Project Purpose", mem.project_purpose or "(Not set)")
+    table.add_row("Tech Stack", ", ".join(f"{k}: {v}" for k, v in mem.tech_stack.items()) or "(Empty)")
+    table.add_row("Decisions Recorded", str(len(mem.architectural_decisions)))
+    table.add_row("Completed Tasks", str(len(mem.completed_tasks)))
+
+    console.print(table)
+    console.print("")
+
+
+@app.command(name="mode", help="Inspect or switch operating mode: 'local', 'cloud', or 'auto'.")
+def mode_command(
+    mode_name: Optional[str] = typer.Argument(
+        None,
+        help="Target operating mode ('local', 'cloud', 'auto')",
+    ),
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Workspace directory",
+    ),
+) -> None:
+    """Inspect or configure operating mode."""
+    print_banner()
+    cfg = load_config(workspace)
+
+    if not mode_name:
+        console.print(f"Active Operating Mode: [bold cyan]{cfg.runtime.mode.upper()}[/bold cyan]")
+        console.print("[dim]Options: [bold]electorn mode local[/bold] | [bold]electorn mode cloud[/bold] | [bold]electorn mode auto[/bold][/dim]\n")
+        return
+
+    clean_mode = mode_name.lower().strip()
+    if clean_mode not in ("local", "cloud", "auto"):
+        console.print(f"[bold red]Invalid mode '{mode_name}'.[/bold red] Choose from: local, cloud, auto.\n")
+        return
+
+    cfg.runtime.mode = clean_mode
+    config_file = workspace / ".electorn.yaml"
+    save_config(cfg, config_file)
+    console.print(f"✔ [bold green]Operating mode set to:[/bold green] [bold cyan]{clean_mode.upper()}[/bold cyan]")
+    console.print(f"  [dim]Saved to {config_file}[/dim]\n")
+
+
+@app.command(name="config", help="View or modify Electorn configuration.")
+def config_command(
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Target workspace directory",
+    ),
+) -> None:
+    """Display project configuration."""
+    print_banner()
+    cfg = load_config(workspace)
+
+    table = Table(title="⚙️ Electorn Configuration", border_style="cyan")
+    table.add_column("Setting", style="bold white")
+    table.add_column("Value", style="cyan")
+
+    table.add_row("Operating Mode", cfg.runtime.mode)
+    table.add_row("Ollama Base URL", cfg.runtime.ollama_base_url)
+    table.add_row("Target Model", cfg.runtime.model or "Auto-selected")
+    table.add_row("Fallback Model", cfg.runtime.fallback_model or "None")
+    table.add_row("Timeout Seconds", str(cfg.runtime.timeout_seconds))
+    table.add_row("Context Tokens", str(cfg.runtime.context_tokens))
+    table.add_row("Max Repair Attempts", str(cfg.orchestration.max_repair_attempts))
+    table.add_row("Sequential Execution", str(cfg.orchestration.sequential_execution))
+
+    console.print(table)
+    console.print("")
+
+
+@app.command(name="version", help="Show Electorn version and runtime info.")
+def version_command() -> None:
+    """Print Electorn version."""
+    console.print(f"[bold cyan]Electorn AI[/bold cyan] [bold green]v{__version__}[/bold green] — Autonomous AI Development Team")
+    console.print(f"Powered by HS AI Solutions: [underline]https://hs-ai-studio.onrender.com/[/underline]\n")
+
+
 @app.command(name="chat", help="Launch futuristic multi-agent interactive chat studio.")
 def chat_command(
     workspace: Path = typer.Option(
@@ -489,6 +1007,8 @@ def chat_command(
         auto_approve=True,
     )
     profile = team.model_profile
+    selector = ModelSelector(client)
+    web_searcher = WebSearchEngine()
 
     # Agent registry for dynamic switching
     agent_map = {
@@ -502,13 +1022,30 @@ def chat_command(
     current_agent_key = "architect"
     current_agent, current_icon, current_desc = agent_map[current_agent_key]
 
+    def display_help() -> None:
+        table = Table(title="⚡ Electorn Studio Commands & Futuristic Shortcuts", border_style="cyan")
+        table.add_column("Command", style="bold yellow")
+        table.add_column("Description", style="white")
+        table.add_row("/search <query>", "🌐 Run autonomous live web search without API keys")
+        table.add_row("/web <prompt>", "🌐 Search web & synthesize answer with live citations")
+        table.add_row("/agent <name>", "🔄 Switch active persona (architect, backend, frontend, database, qa, devops)")
+        table.add_row("/model [name]", "⚡ Inspect installed Ollama models or switch active model")
+        table.add_row("/files", "📁 Inspect workspace file hierarchy tree")
+        table.add_row("/read <file>", "📄 View workspace file contents")
+        table.add_row("/build <prompt>", "🚀 Trigger full autonomous multi-agent development pipeline")
+        table.add_row("/clear", "🧹 Clear conversation memory buffer")
+        table.add_row("/help", "❓ Show this command reference table")
+        table.add_row("/exit", "🚪 Exit studio session")
+        console.print(table)
+        console.print("")
+
     chat_banner = (
         f"🌌 [bold cyan]ELECTORN FUTURISTIC AI STUDIO[/bold cyan]\n"
         f"Active Neural Engine: [bold green]{profile.name}[/bold green] ({profile.description})\n"
         f"Active Persona: {current_icon} [bold yellow]{current_agent.name}[/bold yellow] — {current_desc}\n"
         f"Target Workspace: [bold white]{team.workspace_dir}[/bold white]\n\n"
-        f"[dim]Commands: [bold]/agent <name>[/bold] (architect|backend|frontend|database|qa|devops) | "
-        f"[bold]/files[/bold] | [bold]/read <file>[/bold] | [bold]/build <prompt>[/bold] | [bold]/clear[/bold] | [bold]/exit[/bold][/dim]"
+        f"[dim]Commands: [bold]/search <query>[/bold] | [bold]/web <query>[/bold] | [bold]/agent <name>[/bold] | "
+        f"[bold]/model [name][/bold] | [bold]/files[/bold] | [bold]/build <prompt>[/bold] | [bold]/help[/bold] | [bold]/exit[/bold][/dim]"
     )
     console.print(Panel(chat_banner, border_style="magenta", padding=(1, 2)))
     console.print("")
@@ -525,6 +1062,10 @@ def chat_command(
             if user_input.lower() in ("/exit", "/quit", "exit", "quit"):
                 console.print("\n[yellow]Shutting down Electorn Studio. Until next time! 🚀[/yellow]")
                 break
+
+            if user_input.lower() in ("/help", "help", "?"):
+                display_help()
+                continue
 
             if user_input.lower() == "/clear":
                 conversation_history.clear()
@@ -560,49 +1101,113 @@ def chat_command(
                     console.print(f"[yellow]Unknown agent. Choose from: {', '.join(agent_map.keys())}[/yellow]\n")
                 continue
 
+            if user_input.lower().startswith("/model"):
+                parts = user_input.split(maxsplit=1)
+                if len(parts) == 1:
+                    models = client.list_models()
+                    console.print(f"\n[cyan]Active Neural Engine:[/cyan] [bold green]{team.model_profile.name}[/bold green]")
+                    console.print("[dim]Installed models in Ollama:[/dim]")
+                    for m in models:
+                        marker = " ⭐ [bold green](Active)[/bold green]" if m.name == team.model_profile.name else ""
+                        console.print(f"  • {m.name}{marker}")
+                    console.print("[dim]Switch model with: [bold]/model <model_name>[/bold] (e.g. /model llama3.2:1b)[/dim]\n")
+                else:
+                    new_model = parts[1].strip()
+                    new_profile = selector.profile_model(OllamaModelInfo(name=new_model, size_bytes=0))
+                    team.model_profile = new_profile
+                    for a_tuple in agent_map.values():
+                        a_tuple[0].model = new_model
+                        a_tuple[0].model_profile = new_profile
+                    console.print(f"\n⚡ [bold green]Switched active neural engine to:[/bold green] [bold cyan]{new_model}[/bold cyan] ({new_profile.description})\n")
+                continue
+
+            # Live autonomous web search
+            if user_input.lower().startswith("/search "):
+                search_query = user_input[8:].strip()
+                with console.status(f"[cyan]🌐 Searching the web for: \"{search_query}\"...[/cyan]", spinner="dots"):
+                    results = web_searcher.search(search_query)
+                if not results:
+                    console.print(f"[yellow]No web search results found for \"{search_query}\".[/yellow]\n")
+                else:
+                    console.print(web_searcher.format_table(search_query, results))
+                    console.print("")
+                continue
+
+            web_context_prompt = ""
+            effective_query = user_input
+
+            # Web-augmented prompt (/web <query>)
+            if user_input.lower().startswith("/web "):
+                effective_query = user_input[5:].strip()
+                with console.status(f"[cyan]🌐 Retrieving live web sources for: \"{effective_query}\"...[/cyan]", spinner="dots"):
+                    results = web_searcher.search(effective_query, max_results=4)
+                if results:
+                    console.print(web_searcher.format_table(effective_query, results))
+                    web_context_prompt = web_searcher.format_context_prompt(effective_query, results)
+                else:
+                    console.print(f"[dim]No external web results returned; consulting internal knowledge.[/dim]")
+
             if user_input.lower().startswith("/build "):
                 build_prompt = user_input[7:].strip()
                 console.print(f"\n🚀 [bold green]Initiating Autonomous Multi-Agent Development Pipeline for:[/bold green] \"{build_prompt}\"\n")
                 run_development_pipeline(prompt=build_prompt, workspace=team.workspace_dir, model=model, auto_approve=True)
                 continue
 
-            # Interactive AI Response
-            conversation_history.append({"role": "user", "content": user_input})
-            # Keep history compact for small model context budgets
+            # Append user question to history
+            conversation_history.append({"role": "user", "content": effective_query})
             if len(conversation_history) > 8:
                 conversation_history = conversation_history[-8:]
 
-            # Inject active workspace awareness into prompt
-            workspace_summary = team.file_manager.get_directory_tree_str()
+            # Workspace + Agent Context
+            workspace_files = team.file_manager.list_files()[:10]
+            ws_context = f"Workspace files: {', '.join(workspace_files) if workspace_files else 'empty'}"
             augmented_prompt = (
-                f"[SYSTEM CONTEXT: You are {current_agent.name} ({current_agent.role}). "
-                f"Workspace files: {', '.join(team.file_manager.list_files()[:10]) or 'empty'}]\n\n"
-                f"User Question: {user_input}"
+                f"[SYSTEM CONTEXT: You are {current_agent.name} ({current_agent.role}). {ws_context}]\n"
+                f"{web_context_prompt}\n"
+                f"User Question: {effective_query}"
             )
 
-            with console.status(f"[magenta]{current_icon} {current_agent.name} synthesizing solution...[/magenta]", spinner="dots"):
-                response = current_agent.ask(augmented_prompt)
+            # LIVE STREAMING RESPONSE
+            console.print(f"\n{current_icon} [bold yellow]{current_agent.name}[/bold yellow] ❯ ", end="")
+            streamed_chunks: list[str] = []
 
-            # Display formatted markdown
-            console.print(f"\n{current_icon} [bold yellow]{current_agent.name}[/bold yellow] ❯")
-            console.print(Markdown(response.content))
+            try:
+                # Direct streaming yields tokens as they are generated by Ollama
+                for chunk in current_agent.stream_ask(augmented_prompt, conversation_history[:-1]):
+                    console.print(chunk, end="", highlight=False)
+                    streamed_chunks.append(chunk)
+                    if hasattr(sys.stdout, "flush"):
+                        sys.stdout.flush()
+            except Exception as stream_err:
+                console.print(f"\n[dim yellow]Streaming paused ({stream_err}), executing direct generation...[/dim yellow]")
+                try:
+                    direct_resp = current_agent.ask(augmented_prompt)
+                    console.print(direct_resp.content)
+                    streamed_chunks = [direct_resp.content]
+                except Exception as direct_err:
+                    console.print(f"\n[bold red]Model generation error:[/bold red] {direct_err}")
+                    continue
 
-            # Auto-detect if agent generated code files and ask user if they want to write them
-            detected_files = BaseAgent.extract_files_from_text(response.content)
-            if detected_files:
-                console.print("")
-                for f_path, f_code in detected_files.items():
-                    save_choice = Prompt.ask(
-                        f"  💾 Detected code for [bold cyan]{f_path}[/bold cyan]. Save directly to workspace?",
-                        choices=["y", "n"],
-                        default="y",
-                    )
-                    if save_choice.lower() == "y":
-                        op = team.file_manager.write_file(f_path, f_code)
-                        console.print(f"  ✔ [bold green]Saved[/bold green] {op.path} ({op.bytes_written} bytes)")
+            full_text = "".join(streamed_chunks).strip()
+            console.print("\n")
 
-            conversation_history.append({"role": "assistant", "content": response.content})
-            console.print("")
+            if full_text:
+                conversation_history.append({"role": "assistant", "content": full_text})
+
+                # Auto-detect if agent generated code files and prompt user to write them
+                detected_files = BaseAgent.extract_files_from_text(full_text)
+                if detected_files:
+                    console.print("")
+                    for f_path, f_code in detected_files.items():
+                        save_choice = Prompt.ask(
+                            f"  💾 Detected code for [bold cyan]{f_path}[/bold cyan]. Save directly to workspace?",
+                            choices=["y", "n"],
+                            default="y",
+                        )
+                        if save_choice.lower() == "y":
+                            op = team.file_manager.write_file(f_path, f_code)
+                            console.print(f"  ✔ [bold green]Saved[/bold green] {op.path} ({op.bytes_written} bytes)")
+                    console.print("")
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Chat session closed.[/yellow]")

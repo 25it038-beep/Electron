@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Generator, Optional
 from electorn.runtime.model_selector import ModelProfile
 from electorn.runtime.ollama_client import OllamaClient, OllamaResponse
 
@@ -59,6 +59,25 @@ class BaseAgent:
             temperature=self.temperature,
             context_tokens=self.model_profile.recommended_context,
             format_json=format_json,
+        )
+
+    def stream_ask(
+        self,
+        prompt: str,
+        conversation_history: Optional[list[dict[str, str]]] = None,
+    ) -> Generator[str, None, None]:
+        """Stream response tokens progressively from the agent."""
+        system = self._build_system_prompt()
+        messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+        if conversation_history:
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": prompt})
+
+        return self.client.stream_chat(
+            model=self.model,
+            messages=messages,
+            temperature=self.temperature,
+            context_tokens=self.model_profile.recommended_context,
         )
 
     def generate_files(self, task_description: str, context: str, expected_files: Optional[list[str]] = None) -> dict[str, str]:

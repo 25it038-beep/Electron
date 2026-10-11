@@ -60,3 +60,26 @@ def test_architect_agent_mock():
     assert spec.project_name != ""
     assert spec.run_command != ""
     assert len(spec.file_manifest) > 0
+
+
+def test_base_agent_stream_ask():
+    client = OllamaClient(mock_mode=True)
+    profile = ModelProfile(
+        name="llama3.2:latest",
+        tier="small",
+        parameter_approx=3.0,
+        recommended_context=4096,
+        is_code_specialized=True,
+        description="Small model",
+    )
+    agent = BaseAgent(
+        name="Tester",
+        role="Tester Agent",
+        icon="🧪",
+        system_prompt="Test prompt",
+        client=client,
+        model_profile=profile,
+    )
+    tokens = list(agent.stream_ask("Hello"))
+    assert len(tokens) > 0
+    assert "Mock streaming response chunk" in tokens[0]

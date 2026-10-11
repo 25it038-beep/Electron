@@ -40,6 +40,22 @@ class RuntimeConfig(BaseModel):
         default="5m",
         description="Ollama keep_alive parameter for model unloading/caching",
     )
+    mode: str = Field(
+        default="auto",
+        description="Operating mode: 'local', 'cloud', or 'auto'",
+    )
+    cloud_api_key: Optional[str] = Field(
+        default=None,
+        description="Optional API key for cloud provider",
+    )
+    cloud_base_url: str = Field(
+        default="https://api.openai.com/v1",
+        description="Base URL for cloud provider REST endpoint",
+    )
+    cloud_model: str = Field(
+        default="gpt-4o-mini",
+        description="Model name for cloud provider",
+    )
 
 
 class OrchestrationConfig(BaseModel):

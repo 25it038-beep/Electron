@@ -46,3 +46,37 @@ def test_cli_studio():
     assert "Lumina" in result.output
     assert "Ledger" in result.output
 
+
+def test_cli_new_commands():
+    # Test version
+    ver_res = runner.invoke(app, ["version"])
+    assert ver_res.exit_code == 0
+    assert "Electorn AI" in ver_res.output
+
+    with runner.isolated_filesystem():
+        # Test config
+        cfg_res = runner.invoke(app, ["config"])
+        assert cfg_res.exit_code == 0
+        assert "Electorn Configuration" in cfg_res.output
+
+        # Test mode
+        mode_res = runner.invoke(app, ["mode", "local"])
+        assert mode_res.exit_code == 0
+        assert "LOCAL" in mode_res.output
+
+        # Test status
+        status_res = runner.invoke(app, ["status"])
+        assert status_res.exit_code == 0
+        assert "Workspace Status" in status_res.output
+
+        # Test checkpoint
+        cp_res = runner.invoke(app, ["checkpoint", "test cp"])
+        assert cp_res.exit_code == 0
+        assert "Created snapshot checkpoint" in cp_res.output
+
+        # Test analyze
+        an_res = runner.invoke(app, ["analyze", "."])
+        assert an_res.exit_code == 0
+        assert "Codebase Intelligence" in an_res.output
+
+
