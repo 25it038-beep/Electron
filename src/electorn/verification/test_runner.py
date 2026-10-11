@@ -51,7 +51,10 @@ class TestRunner:
 
     def run_tests(self, custom_command: Optional[str] = None) -> TestRunResult:
         """Run tests and return structured results."""
-        cmd = custom_command or self.discover_test_command()
+        discovered = self.discover_test_command()
+        cmd = custom_command or discovered
+        if cmd == "pytest" or cmd == "pytest -q":
+            cmd = f'"{sys.executable}" -m pytest -q'
         if not cmd:
             return TestRunResult(
                 passed=True,
