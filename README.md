@@ -1,11 +1,13 @@
 # ⚡ Electorn AI
 
-> **One CLI. A Complete AI Development Team.**
+> **One CLI. A Complete AI Development Team.**  
+> *Part of the [HS AI Solutions](https://hs-ai-studio.onrender.com/) Studio.*
 
 Transform any compatible computer into a local AI software development company powered by **Ollama** and specialized AI agents.
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://python.org)
 [![Ollama](https://img.shields.io/badge/Engine-Ollama%20Local-black.svg)](https://ollama.ai)
+[![Studio](https://img.shields.io/badge/Studio-HS%20AI%20Solutions-blueviolet.svg)](https://hs-ai-studio.onrender.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Multi-Agent](https://img.shields.io/badge/Architecture-Sequential%20Multi--Agent-green.svg)](#multi-agent-system)
 
@@ -13,7 +15,7 @@ Transform any compatible computer into a local AI software development company p
 
 ## 🌟 Vision & Overview
 
-Electorn AI turns your terminal into a complete, private, autonomous software development engineering department. By coordinating specialized AI agents sequentially and connecting directly to your local **Ollama** instance, Electorn builds real, production-ready applications with zero API fees, complete privacy, and minimal RAM footprint.
+Electorn AI turns your terminal into a complete, private, autonomous software development engineering department. Developed as part of **[HS AI Solutions](https://hs-ai-studio.onrender.com/)**, Electorn coordinates specialized AI agents sequentially and connects directly to your local **Ollama** instance, building real, production-ready applications with zero API fees, complete privacy, and minimal RAM footprint.
 
 ---
 
@@ -157,6 +159,38 @@ pytest
 
 ---
 
+## 🌐 Part of the HS AI Solutions Studio
+
+Electorn AI is the dedicated local autonomous development engine of **[HS AI Solutions](https://hs-ai-studio.onrender.com/)**, an ecosystem of real, deployed AI applications:
+
+| Product | Focus | Live Access |
+| :--- | :--- | :--- |
+| **⚡ Electorn AI** | Autonomous Multi-Agent Development Team | Local CLI (`electorn`) |
+| **🛡️ Pendulum** | Automated Private Desktop Browser | [Download Windows](https://hs-ai-studio.onrender.com/downloads/pendulum-setup.exe) / [Details](https://hs-ai-studio.onrender.com/products/pendulum) |
+| **🎨 Lumina** | AI Presentation Studio & Slide Architecture | [Launch Lumina](https://lumina-pghe.onrender.com/) / [Details](https://hs-ai-studio.onrender.com/products/lumina) |
+| **🤖 HSBot** | Multi-Model AI Chatbot (Fast, Balanced, Deep) | [Launch HSBot](https://hs-chatbot-3.onrender.com/) / [Details](https://hs-ai-studio.onrender.com/products/hsbot) |
+| **📜 Ledger** | Digital Identity & Career Intelligence Layer | [Launch Ledger](https://ledger-2-er3t.onrender.com/) / [Details](https://hs-ai-studio.onrender.com/products/ledger) |
+| **⛨ Phishing Defence** | Threat Operations & Malicious Link Protection | [Launch Phishing Defence](https://forensic-ai-1-mma4.onrender.com/) / [Details](https://hs-ai-studio.onrender.com/products/phishing-defence) |
+| **💻 HS CODE** | Desktop AI Coding Companion | [Download HS CODE](https://hs-ai-studio.onrender.com/downloads/hs-code-setup.exe) / [Details](https://hs-ai-studio.onrender.com/products/hs-code) |
+| **🎓 Academia AI** | Personal AI Learning Operating System | [Launch Academia AI](https://acdemia01-2.onrender.com/) / [Details](https://hs-ai-studio.onrender.com/products/academia) |
+
+Explore the complete portfolio directly from the CLI:
+```bash
+electorn studio
+```
+
+---
+
+## 👨‍💻 Creator & Studio Contact
+
+- **Studio Website:** [https://hs-ai-studio.onrender.com/](https://hs-ai-studio.onrender.com/)
+- **Creator:** Harshan Seliyan
+- **LinkedIn:** [Harshan Seliyan](https://www.linkedin.com/in/harshan-seliyan-b-s-5339b4282)
+- **Email:** [harshanseliyan28@gmail.com](mailto:harshanseliyan28@gmail.com)
+
+---
+
 ## 📜 License
 
-MIT License. Built for local, open-source, private AI development.
+MIT License. Built with intention by HS AI Solutions.
+

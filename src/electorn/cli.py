@@ -60,7 +60,8 @@ def print_banner() -> None:
     title.append("⚡ ELECTORN AI", style="bold cyan")
     title.append(" — ", style="dim")
     title.append("One CLI. A Complete AI Development Team.\n", style="bold white")
-    title.append(f"v{__version__} | Powered by Ollama Local AI Engine", style="dim cyan")
+    title.append(f"v{__version__} | Powered by Ollama Local AI Engine\n", style="dim cyan")
+    title.append("Part of HS AI Solutions: https://hs-ai-studio.onrender.com/", style="dim magenta")
     console.print(Panel(title, border_style="cyan", padding=(1, 2)))
 
 
@@ -72,7 +73,7 @@ def default_callback(ctx: typer.Context) -> None:
         console.print(
             "Usage: [bold cyan]electorn \"Build a complete job recommendation platform\"[/bold cyan]\n"
             "   or: [bold cyan]electorn run \"<prompt>\"[/bold cyan]\n\n"
-            "Available commands: [bold]run[/bold], [bold]models[/bold], [bold]doctor[/bold], [bold]init[/bold]\n"
+            "Available commands: [bold]run[/bold], [bold]models[/bold], [bold]doctor[/bold], [bold]init[/bold], [bold]studio[/bold]\n"
             "Run [bold]electorn --help[/bold] to see all available commands and flags.\n"
         )
 
@@ -323,6 +324,80 @@ def init_command(
     cfg = Config()
     save_config(cfg, config_file)
     console.print(f"[green]✔ Created Electorn configuration at:[/green] [bold]{config_file}[/bold]")
+
+
+@app.command(name="studio", help="Explore the HS AI Solutions ecosystem & live products.")
+def studio_command() -> None:
+    """Display HS AI Solutions product portfolio and live links."""
+    print_banner()
+
+    table = Table(title="🌐 HS AI Solutions Ecosystem (https://hs-ai-studio.onrender.com/)", border_style="cyan")
+    table.add_column("Product", style="bold cyan")
+    table.add_column("Category", style="yellow")
+    table.add_column("Description", style="white")
+    table.add_column("Live URL / Status", style="green")
+
+    table.add_row(
+        "⚡ Electorn AI",
+        "Autonomous Dev Team",
+        "One CLI. A Complete AI Development Team powered by Ollama.",
+        "Local CLI (Active)",
+    )
+    table.add_row(
+        "🛡️ Pendulum",
+        "AI Browser & Privacy",
+        "Automated private desktop browser with stealth web workflows.",
+        "https://hs-ai-studio.onrender.com/products/pendulum",
+    )
+    table.add_row(
+        "🎨 Lumina",
+        "AI Creation",
+        "Intelligent AI presentation planner, slide architecture & designer.",
+        "https://lumina-pghe.onrender.com/",
+    )
+    table.add_row(
+        "🤖 HSBot",
+        "Multi-Model Workspace",
+        "Multi-model AI assistant bringing multiple models into one chat.",
+        "https://hs-chatbot-3.onrender.com/",
+    )
+    table.add_row(
+        "📜 Ledger",
+        "AI Digital Identity",
+        "Connects credentials, projects, and skills into career intelligence.",
+        "https://ledger-2-er3t.onrender.com/",
+    )
+    table.add_row(
+        "⛨ Phishing Defence",
+        "AI Threat Operations",
+        "Analyzes suspicious URLs, emails, and links before you interact.",
+        "https://forensic-ai-1-mma4.onrender.com/",
+    )
+    table.add_row(
+        "💻 HS CODE",
+        "Desktop AI Companion",
+        "Lightweight native Windows desktop AI coding companion.",
+        "https://hs-ai-studio.onrender.com/products/hs-code",
+    )
+    table.add_row(
+        "🎓 Academia AI",
+        "Learning Operating System",
+        "Turns syllabi and notes into roadmaps, live tutors, and quizzes.",
+        "https://acdemia01-2.onrender.com/",
+    )
+
+    console.print(table)
+    console.print(
+        "\n✨ [bold cyan]HS AI Solutions Studio:[/bold cyan] [underline magenta]https://hs-ai-studio.onrender.com/[/underline magenta]\n"
+        "Built by [bold white]Harshan Seliyan[/bold white] | [dim]harshanseliyan28@gmail.com[/dim]\n"
+    )
+
+
+@app.command(name="hs", hidden=True, help="Alias for studio command.")
+def hs_alias_command() -> None:
+    """Alias for studio command."""
+    studio_command()
+
 
 
 def main() -> None:

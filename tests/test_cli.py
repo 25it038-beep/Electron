@@ -35,3 +35,14 @@ def test_cli_init_and_run_mock():
         direct_res = runner.invoke(app, ["Build a second tool", "--mock", "-y"])
         assert direct_res.exit_code == 0
         assert "Development Workflow Completed Successfully" in direct_res.output
+
+
+def test_cli_studio():
+    result = runner.invoke(app, ["studio"])
+    assert result.exit_code == 0
+    assert "HS AI Solutions" in result.output
+    assert "https://hs-ai-studio.onrender.com/" in result.output
+    assert "Pendulum" in result.output
+    assert "Lumina" in result.output
+    assert "Ledger" in result.output
+

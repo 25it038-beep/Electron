@@ -8,10 +8,15 @@ version = "0.1.0"
 description = "One CLI. A Complete AI Development Team powered by Ollama."
 readme = "README.md"
 authors = [
-    { name = "Electorn Team", email = "info@electorn.ai" }
+    { name = "Harshan Seliyan (HS AI Solutions)", email = "harshanseliyan28@gmail.com" }
 ]
 license = { text = "MIT" }
 requires-python = ">=3.9"
+
+[project.urls]
+Homepage = "https://hs-ai-studio.onrender.com/"
+Studio = "https://hs-ai-studio.onrender.com/"
+LinkedIn = "https://www.linkedin.com/in/harshan-seliyan-b-s-5339b4282"
 keywords = ["ai", "agents", "ollama", "development", "multi-agent", "cli", "self-repair", "local-ai"]
 classifiers = [
     "Development Status :: 4 - Beta",
