@@ -30,7 +30,7 @@ jobs:
 
       - name: Run test suite
         run: |
-          pytest -v
+          pytest -v --tb=short
 
       - name: Build sdist and wheel distributions
         run: |
