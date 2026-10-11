@@ -1242,14 +1242,13 @@ def chat_command(
             if len(conversation_history) > 8:
                 conversation_history = conversation_history[-8:]
 
-            # Pure Isolated Chat Prompt (Zero Disk I/O, Instant Response)
-            augmented_prompt = (
-                f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Studio.\n"
-                f"{web_context_prompt}\n"
-                f"Respond conversationally, helpfully, and concisely. Keep answers focused. "
-                f"Do not output long file boilerplates unless explicitly asked to write code.\n\n"
-                f"User Question: {effective_query}"
+            # Conversational Chat System Prompt Override
+            chat_system = (
+                f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Studio. "
+                f"You are in interactive chat mode. Greet the user naturally, answer questions conversationally and helpfully. "
+                f"Only write code snippets or files if the user explicitly asks you to write, design, or generate code."
             )
+            user_prompt = f"{web_context_prompt}\n{effective_query}" if web_context_prompt else effective_query
 
             # LIVE STREAMING RESPONSE WITH RESPONSIVE SPINNER
             streamed_chunks: list[str] = []
@@ -1258,7 +1257,7 @@ def chat_command(
             try:
                 # Pre-warm status indicator until first token streams
                 with console.status(f"[cyan]{current_icon} {current_agent.name} is thinking...[/cyan]", spinner="dots"):
-                    token_gen = current_agent.stream_ask(augmented_prompt, conversation_history[:-1])
+                    token_gen = current_agent.stream_ask(user_prompt, conversation_history[:-1], system_override=chat_system)
                     try:
                         first_chunk = next(token_gen)
                     except StopIteration:

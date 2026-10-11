@@ -65,9 +65,10 @@ class BaseAgent:
         self,
         prompt: str,
         conversation_history: Optional[list[dict[str, str]]] = None,
+        system_override: Optional[str] = None,
     ) -> Generator[str, None, None]:
         """Stream response tokens progressively from the agent."""
-        system = self._build_system_prompt()
+        system = system_override or self._build_system_prompt()
         messages: list[dict[str, str]] = [{"role": "system", "content": system}]
         if conversation_history:
             messages.extend(conversation_history)
