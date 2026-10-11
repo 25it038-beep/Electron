@@ -64,8 +64,19 @@ app = typer.Typer(
 console = Console(legacy_windows=False)
 
 
+from electorn.audio import play_intro_audio
+
+# Audio intro flag to only play once per session
+_INTRO_PLAYED = False
+
+
 def print_banner() -> None:
-    """Print the Electorn AI header banner."""
+    """Print the Electorn AI header banner and play theme intro."""
+    global _INTRO_PLAYED
+    if not _INTRO_PLAYED:
+        _INTRO_PLAYED = True
+        play_intro_audio(duration=6.0, async_mode=True)
+
     title = Text()
     title.append("⚡ ELECTORN AI", style="bold cyan")
     title.append(" — ", style="dim")
