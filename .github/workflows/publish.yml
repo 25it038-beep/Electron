@@ -29,16 +29,8 @@ jobs:
           pip install -e .
 
       - name: Run test suite
-        continue-on-error: true
         run: |
-          pytest -v -s --tb=short 2>&1 | tee pytest_output.txt
-
-      - name: Upload test log
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: pytest-results
-          path: pytest_output.txt
+          pytest -v
 
       - name: Build sdist and wheel distributions
         run: |
@@ -56,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/electorn
+      url: https://pypi.org/p/ElectronAi
     permissions:
       id-token: write  # MANDATORY for PyPI Trusted Publishing (OIDC)
       contents: read
