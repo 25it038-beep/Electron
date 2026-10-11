@@ -1064,6 +1064,14 @@ def chat_command(
     ),
 ) -> None:
     """Futuristic conversational terminal with specialized AI agents, file inspection & code streaming."""
+    # Unwrap OptionInfo if invoked directly from default_callback
+    if hasattr(workspace, "default"):
+        workspace = getattr(workspace, "default", Path("."))
+    if hasattr(model, "default"):
+        model = getattr(model, "default", None)
+    if not isinstance(workspace, Path):
+        workspace = Path(str(workspace) if workspace else ".")
+
     print_banner()
 
     cfg = load_config(workspace)

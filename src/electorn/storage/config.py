@@ -126,7 +126,13 @@ def get_global_config_path() -> Path:
 
 def get_local_config_path(workspace_dir: Path | str = ".") -> Path:
     """Return path to project-level configuration (.electorn.yaml)."""
-    return Path(workspace_dir) / ".electorn.yaml"
+    # Guard against Typer OptionInfo or unparsed defaults when called directly as a function
+    if hasattr(workspace_dir, "default"):
+        workspace_dir = getattr(workspace_dir, "default", ".")
+    try:
+        return Path(workspace_dir) / ".electorn.yaml"
+    except Exception:
+        return Path(".") / ".electorn.yaml"
 
 
 def load_config(workspace_dir: Path | str = ".") -> Config:
