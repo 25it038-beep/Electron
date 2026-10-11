@@ -6,7 +6,7 @@ import difflib
 import os
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 from pydantic import BaseModel, Field
 from electorn.workspace.permissions import PermissionManager
 
@@ -30,10 +30,12 @@ class FileManager:
         workspace_root: Path | str,
         permissions: Optional[PermissionManager] = None,
         ignore_patterns: Optional[list[str]] = None,
+        on_file_op: Optional[Callable[[FileOperationResult], None]] = None,
     ):
         self.workspace_root = Path(workspace_root).resolve()
         self.workspace_root.mkdir(parents=True, exist_ok=True)
         self.permissions = permissions or PermissionManager(auto_approve=True)
+        self.on_file_op = on_file_op
         self.ignore_patterns = ignore_patterns or [
             ".git",
             "__pycache__",
@@ -114,13 +116,19 @@ class FileManager:
                 )
 
         target.write_text(content, encoding="utf-8")
-        return FileOperationResult(
+        result = FileOperationResult(
             path=rel_str,
             action="modified" if is_existing else "created",
             diff=diff_str,
             bytes_written=len(content.encode("utf-8")),
             success=True,
         )
+        if self.on_file_op:
+            try:
+                self.on_file_op(result)
+            except Exception:
+                pass
+        return result
 
     def delete_file(self, path: str | Path) -> FileOperationResult:
         """Safely delete a file inside the workspace."""
@@ -135,7 +143,13 @@ class FileManager:
         elif target.is_dir():
             shutil.rmtree(target)
 
-        return FileOperationResult(path=rel_str, action="deleted", success=True)
+        del_res = FileOperationResult(path=rel_str, action="deleted", success=True)
+        if self.on_file_op:
+            try:
+                self.on_file_op(del_res)
+            except Exception:
+                pass
+        return del_res
 
     def list_files(self, max_depth: int = 5) -> list[str]:
         """List relative paths of all relevant files in the workspace."""

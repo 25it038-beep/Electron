@@ -77,7 +77,7 @@ class OllamaClient:
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
-        timeout: float = 180.0,
+        timeout: float = 300.0,
         mock_mode: bool = False,
     ):
         self.base_url = base_url.rstrip("/")

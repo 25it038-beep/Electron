@@ -22,6 +22,7 @@ from electorn.orchestration.team import MultiAgentTeam
 from electorn.runtime.model_selector import ModelSelector
 from electorn.runtime.ollama_client import OllamaClient
 from electorn.storage.config import Config, load_config, save_config
+from electorn.workspace.file_manager import FileOperationResult
 
 
 # Force UTF-8 on Windows terminals to support emojis and rich unicode formatting
@@ -130,7 +131,11 @@ def run_development_pipeline(
     print_banner()
 
     cfg = load_config(workspace)
-    client = OllamaClient(base_url=cfg.runtime.ollama_base_url, mock_mode=mock)
+    client = OllamaClient(
+        base_url=cfg.runtime.ollama_base_url,
+        timeout=cfg.runtime.timeout_seconds,
+        mock_mode=mock,
+    )
 
     # Pre-flight check
     if not mock and not client.is_available():
@@ -146,6 +151,16 @@ def run_development_pipeline(
         )
         sys.exit(1)
 
+    # Live File Operation Callback
+    def on_file_op(op: FileOperationResult) -> None:
+        if op.action == "created":
+            console.print(f"    📄 [bold green][FILE CREATED][/bold green] [cyan]{op.path}[/cyan] ({op.bytes_written} bytes)")
+        elif op.action == "modified":
+            diff_hint = f" [dim](+ modified content)[/dim]" if op.diff else ""
+            console.print(f"    ✏️  [bold yellow][FILE EDITING][/bold yellow] [cyan]{op.path}[/cyan]{diff_hint}")
+        elif op.action == "deleted":
+            console.print(f"    🗑️  [bold red][FILE DELETED][/bold red] [cyan]{op.path}[/cyan]")
+
     try:
         team = MultiAgentTeam(
             workspace_dir=workspace,
@@ -153,18 +168,31 @@ def run_development_pipeline(
             model_name=model,
             auto_approve=auto_approve,
             mock_mode=mock,
+            on_file_op=on_file_op,
         )
     except Exception as err:
         console.print(f"[bold red]Initialization Error:[/bold red] {err}")
         sys.exit(1)
 
     profile = team.model_profile
-    console.print(
-        f"🤖 [bold green]Active AI Engine:[/bold green] [bold cyan]{profile.name}[/bold cyan] "
-        f"({profile.description}) | [dim]Sequential RAM Optimization: Enabled[/dim]\n"
+
+    # Workspace & Agent Status Panel
+    status_content = (
+        f"[bold white]🎯 Prompt:[/bold white] \"{prompt}\"\n"
+        f"[bold white]📁 Live Workspace:[/bold white] [bold green]{team.workspace_dir}[/bold green]\n"
+        f"[bold white]🤖 Active AI Engine:[/bold white] [bold cyan]{profile.name}[/bold cyan] ({profile.description})\n"
+        f"[bold white]⚡ Sequential Execution:[/bold white] [green]Active[/green] (Memory-Optimized 2-4GB RAM)\n"
+        f"[bold white]🏢 Solution Studio:[/bold white] [dim]https://hs-ai-studio.onrender.com/[/dim]"
     )
-    console.print(f"🎯 [bold white]Prompt:[/bold white] \"{prompt}\"")
-    console.print(f"📁 [bold white]Target Workspace:[/bold white] {team.workspace_dir}\n")
+    console.print(
+        Panel(
+            status_content,
+            title="[bold cyan]⚡ ELECTORN LIVE WORKSPACE STATUS[/bold cyan]",
+            border_style="cyan",
+            padding=(1, 2),
+        )
+    )
+    console.print("")
 
     # Callbacks for Rich live status
     def on_step_start(agent_name: str, desc: str) -> None:
@@ -178,7 +206,7 @@ def run_development_pipeline(
         console.print(f"  [yellow]{msg}[/yellow]")
 
     try:
-        with console.status("[bold green]Electorn multi-agent team collaborating...[/bold green]", spinner="dots"):
+        with console.status(f"[bold green]Electorn multi-agent team collaborating on {team.workspace_dir.name}...[/bold green]", spinner="dots"):
             state = team.develop(
                 prompt=prompt,
                 on_step_start=on_step_start,

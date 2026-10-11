@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 from electorn.agents.architect import ArchitectAgent
 from electorn.agents.backend import BackendAgent
 from electorn.agents.database import DatabaseAgent
@@ -23,7 +23,7 @@ from electorn.storage.history import SessionHistory
 from electorn.verification.self_repair import SelfRepairEngine
 from electorn.verification.syntax_checker import SyntaxChecker
 from electorn.verification.test_runner import TestRunner
-from electorn.workspace.file_manager import FileManager
+from electorn.workspace.file_manager import FileManager, FileOperationResult
 from electorn.workspace.permissions import PermissionManager
 
 
@@ -37,11 +37,13 @@ class MultiAgentTeam:
         model_name: Optional[str] = None,
         auto_approve: bool = False,
         mock_mode: bool = False,
+        on_file_op: Optional[Callable[[FileOperationResult], None]] = None,
     ):
         self.workspace_dir = Path(workspace_dir).resolve()
         self.config = config or Config()
         self.auto_approve = auto_approve
         self.mock_mode = mock_mode
+        self.on_file_op = on_file_op
 
         # Core runtime
         self.client = OllamaClient(
@@ -60,6 +62,7 @@ class MultiAgentTeam:
             workspace_root=self.workspace_dir,
             permissions=self.permissions,
             ignore_patterns=self.config.workspace.ignore_patterns,
+            on_file_op=self.on_file_op,
         )
 
         # Execution and Verification Tools

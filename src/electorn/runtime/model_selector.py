@@ -108,8 +108,14 @@ class ModelSelector:
                 s += 25.0
             else:
                 s += 15.0
-            # Prefer newer common instruction models
-            if "qwen" in p.name.lower():
+            # Prefer newer common instruction models, but penalize VL (vision-only) models for pure code generation
+            if "-vl:" in p.name.lower() or "vision" in p.name.lower():
+                s -= 20.0
+            if "coder" in p.name.lower():
+                s += 30.0
+            if "llama3.2" in p.name.lower() and "-vl" not in p.name.lower():
+                s += 20.0
+            elif "qwen" in p.name.lower():
                 s += 10.0
             elif "llama" in p.name.lower():
                 s += 8.0

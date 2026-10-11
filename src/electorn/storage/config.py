@@ -25,7 +25,7 @@ class RuntimeConfig(BaseModel):
         description="Fallback small model if primary is unavailable",
     )
     timeout_seconds: int = Field(
-        default=180,
+        default=300,
         description="Request timeout in seconds for Ollama API calls",
     )
     temperature: float = Field(
