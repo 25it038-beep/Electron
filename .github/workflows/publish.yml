@@ -30,7 +30,7 @@ jobs:
 
       - name: Run test suite
         run: |
-          pytest -v --tb=short
+          pytest -v --tb=short || { echo "=== FAILED TESTS LOG ==="; pytest -v --tb=short --last-failed; exit 1; }
 
       - name: Build sdist and wheel distributions
         run: |
