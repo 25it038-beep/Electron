@@ -7,17 +7,24 @@ name = "electorn"
 version = "0.1.0"
 description = "One CLI. A Complete AI Development Team powered by Ollama."
 readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+
 authors = [
     { name = "Harshan Seliyan (HS AI Solutions)", email = "harshanseliyan28@gmail.com" }
 ]
-license = { text = "MIT" }
-requires-python = ">=3.9"
 
-[project.urls]
-Homepage = "https://hs-ai-studio.onrender.com/"
-Studio = "https://hs-ai-studio.onrender.com/"
-LinkedIn = "https://www.linkedin.com/in/harshan-seliyan-b-s-5339b4282"
-keywords = ["ai", "agents", "ollama", "development", "multi-agent", "cli", "self-repair", "local-ai"]
+keywords = [
+    "ai",
+    "agents",
+    "ollama",
+    "development",
+    "multi-agent",
+    "cli",
+    "self-repair",
+    "local-ai"
+]
+
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -31,6 +38,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
+
 dependencies = [
     "typer>=0.9.0",
     "rich>=13.0.0",
@@ -39,10 +47,16 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.urls]
+Homepage = "https://hs-ai-studio.onrender.com/"
+Repository = "https://github.com/25it038-beep/Electorn"
+LinkedIn = "https://www.linkedin.com/in/harshan-seliyan-b-s-5339b4282"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
+    "build>=1.2.0",
 ]
 
 [project.scripts]
@@ -54,4 +68,3 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-
