@@ -1127,9 +1127,9 @@ def chat_command(
         f"🌌 [bold cyan]ELECTORN FUTURISTIC AI STUDIO[/bold cyan]\n"
         f"Active Neural Engine: [bold green]{profile.name}[/bold green] ({profile.description})\n"
         f"Active Persona: {current_icon} [bold yellow]{current_agent.name}[/bold yellow] — {current_desc}\n"
-        f"Target Workspace: [bold white]{team.workspace_dir}[/bold white]\n\n"
+        f"Mode: [bold green]Lightning Standalone Chat (Zero I/O Latency)[/bold green]\n\n"
         f"[dim]Commands: [bold]/search <query>[/bold] | [bold]/web <query>[/bold] | [bold]/agent <name>[/bold] | "
-        f"[bold]/model [name][/bold] | [bold]/files[/bold] | [bold]/build <prompt>[/bold] | [bold]/help[/bold] | [bold]/exit[/bold][/dim]"
+        f"[bold]/model [name][/bold] | [bold]/build <prompt>[/bold] | [bold]/help[/bold] | [bold]/exit[/bold][/dim]"
     )
     console.print(Panel(chat_banner, border_style="magenta", padding=(1, 2)))
     console.print("")
@@ -1242,10 +1242,9 @@ def chat_command(
             if len(conversation_history) > 8:
                 conversation_history = conversation_history[-8:]
 
-            # Concise Chat Context (prevents slow prefill token calculation)
-            ws_hint = f" ({len(team.file_manager.list_files())} files in workspace)" if team.file_manager.list_files() else ""
+            # Pure Isolated Chat Prompt (Zero Disk I/O, Instant Response)
             augmented_prompt = (
-                f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Studio{ws_hint}.\n"
+                f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Studio.\n"
                 f"{web_context_prompt}\n"
                 f"Respond conversationally, helpfully, and concisely. Keep answers focused. "
                 f"Do not output long file boilerplates unless explicitly asked to write code.\n\n"
