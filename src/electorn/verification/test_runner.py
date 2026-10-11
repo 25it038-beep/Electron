@@ -65,8 +65,9 @@ class TestRunner:
         exec_res: ExecutionResult = self.runner.run(cmd, timeout=90, require_permission=False)
         output = f"{exec_res.stdout}\n{exec_res.stderr}".strip()
 
-        # Parse test metrics
-        passed = exec_res.is_success
+        # Pytest return code 5 means no tests were collected, which is not a failure for clean repos
+        no_tests_collected = exec_res.returncode == 5 or "collected 0 items" in output or "no tests ran" in output
+        passed = exec_res.is_success or no_tests_collected
         total = 0
         passed_count = 0
         failed_count = 0

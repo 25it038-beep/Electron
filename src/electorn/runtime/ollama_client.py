@@ -148,7 +148,12 @@ class OllamaClient:
   "files": [
     {
       "path": "app.py",
-      "content": "print('Mock application initialized')\\n",
+      "content": "def add(a: int, b: int) -> int:\\n    return a + b\\n\\nif __name__ == '__main__':\\n    print('Mock application initialized')\\n",
+      "action": "create"
+    },
+    {
+      "path": "tests/test_app.py",
+      "content": "from app import add\\n\\ndef test_add():\\n    assert add(1, 2) == 3\\n",
       "action": "create"
     }
   ]
