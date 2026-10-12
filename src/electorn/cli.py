@@ -33,6 +33,7 @@ from electorn.workspace.checkpoints import CheckpointManager
 from electorn.workspace.file_manager import FileOperationResult
 from electorn.workspace.project_state import ProjectState
 from electorn.voice import VoiceEngine
+from electorn.automation import AutomationEngine
 
 
 # Force UTF-8 on Windows terminals to support emojis and rich unicode formatting
@@ -1099,6 +1100,7 @@ def chat_command(
     web_searcher = WebSearchEngine()
     voice = VoiceEngine()
     voice_output_active = False
+    automation = AutomationEngine()
 
     # Agent registry for dynamic switching
     agent_map = {
@@ -1118,7 +1120,8 @@ def chat_command(
         table.add_column("Description", style="white")
         table.add_row("/search <query>", "🌐 Run autonomous live web search without API keys")
         table.add_row("/web <prompt>", "🌐 Search web & synthesize answer with live citations")
-        table.add_row("/voice", "🎙️ Toggle voice output (spoken replies aloud)")
+        table.add_row("/auto <action>", "⚡ Autonomous Selenium browser & desktop OS control")
+        table.add_row("/voice [f/m]", "🎙️ Toggle voice output or set female/male neural voice")
         table.add_row("/listen", "🎙️ Record from microphone and transcribe into chat prompt")
         table.add_row("/agent <name>", "🔄 Switch active persona (architect, backend, frontend, database, qa, devops)")
         table.add_row("/model [name]", "⚡ Inspect installed Ollama models or switch active model")
@@ -1135,8 +1138,9 @@ def chat_command(
         f"🌌 [bold cyan]ELECTORN FUTURISTIC AI STUDIO[/bold cyan]\n"
         f"Active Neural Engine: [bold green]{profile.name}[/bold green] ({profile.description})\n"
         f"Active Persona: {current_icon} [bold yellow]{current_agent.name}[/bold yellow] — {current_desc}\n"
-        f"Mode: [bold green]Lightning Standalone Chat (Zero I/O Latency)[/bold green]\n\n"
-        f"[dim]Commands: [bold]/search <query>[/bold] | [bold]/voice[/bold] | [bold]/listen[/bold] | [bold]/agent <name>[/bold] | "
+        f"Mode: [bold green]Lightning Standalone Chat (Zero I/O Latency)[/bold green]\n"
+        f"Automation: [bold cyan]Selenium Web Browser & OS Automation Enabled[/bold cyan]\n\n"
+        f"[dim]Commands: [bold]/search <query>[/bold] | [bold]/auto <cmd>[/bold] | [bold]/voice[/bold] | [bold]/listen[/bold] | [bold]/agent <name>[/bold] | "
         f"[bold]/model [name][/bold] | [bold]/build <prompt>[/bold] | [bold]/help[/bold] | [bold]/exit[/bold][/dim]"
     )
     console.print(Panel(chat_banner, border_style="magenta", padding=(1, 2)))
@@ -1152,6 +1156,7 @@ def chat_command(
 
             # Slash commands
             if user_input.lower() in ("/exit", "/quit", "exit", "quit"):
+                automation.close_browser()
                 console.print("\n[yellow]Shutting down Electorn Studio. Until next time! 🚀[/yellow]")
                 break
 
@@ -1187,6 +1192,23 @@ def chat_command(
                     continue
                 console.print(f"🎙️ [bold cyan]Transcribed:[/bold cyan] [white]{heard}[/white]\n")
                 user_input = heard
+
+            # Autonomous Intent Check: Selenium Browser Automation & OS Control
+            auto_query = user_input[6:].strip() if user_input.lower().startswith("/auto ") else user_input
+            auto_res = automation.execute_intent(auto_query)
+            if auto_res is not None:
+                if auto_res["success"]:
+                    console.print(f"\n⚡ [bold green][AUTONOMOUS ACTION][/bold green] [cyan]{auto_res['message']}[/cyan]\n")
+                else:
+                    console.print(f"\n⚠️  [bold yellow][ACTION NOTICE][/bold yellow] [yellow]{auto_res['message']}[/yellow]\n")
+
+                spoken = auto_res["spoken_response"]
+                console.print(f"{current_icon} [bold yellow]{current_agent.name}[/bold yellow] ❯ {spoken}\n")
+                conversation_history.append({"role": "user", "content": user_input})
+                conversation_history.append({"role": "assistant", "content": spoken})
+                if voice_output_active:
+                    voice.speak(spoken, async_mode=True)
+                continue
 
             if user_input.lower() == "/clear":
                 conversation_history.clear()
@@ -1393,6 +1415,8 @@ def voice_command(
         console.print("Please ensure [green]sounddevice[/green], [green]speech_recognition[/green], and [green]numpy[/green] are installed.")
         return
 
+    automation = AutomationEngine()
+
     team = MultiAgentTeam(
         workspace_dir=workspace,
         config=cfg,
@@ -1401,15 +1425,17 @@ def voice_command(
     )
     profile = team.model_profile
     current_agent = team.architect
+    active_voice_model = voice.get_active_model_name()
 
     voice_banner = (
-        f"🎙️  [bold cyan]ELECTORN AI — HANDS-FREE VOICE ASSISTANT[/bold cyan]\n"
+        f"🎙️  [bold cyan]ELECTORN AI — CONTINUOUS AUTONOMOUS VOICE ASSISTANT[/bold cyan]\n"
         f"Active Neural Engine: [bold green]{profile.name}[/bold green] ({profile.description})\n"
         f"Active Persona: 🧠 [bold yellow]{current_agent.name}[/bold yellow] ({current_agent.role})\n"
-        f"Voice Output: [bold magenta]Female Persona (Natural TTS)[/bold magenta]\n"
-        f"Status: [bold green]Voice In (Mic) & Voice Out (Speaker) Active[/bold green]\n\n"
-        f"[dim]Press [bold]Enter[/bold] to speak with your microphone, or type your query directly.\n"
-        f"Type [bold]exit[/bold] or press [bold]Ctrl+C[/bold] to return to terminal.[/dim]"
+        f"Recent Voice Model: [bold magenta]{active_voice_model}[/bold magenta] (Natural Female Neural Voice)\n"
+        f"Mode: [bold green]Continuous Hands-Free Listening & Automation Active[/bold green]\n"
+        f"Automation: [bold cyan]Selenium Web Browser Control & Desktop OS Automation[/bold cyan]\n\n"
+        f"[dim]Speak any command hands-free (e.g. 'open youtube', 'scroll down', 'search for AI on google', 'open notepad').\n"
+        f"Say [bold]'exit'[/bold], [bold]'quit'[/bold], or press [bold]Ctrl+C[/bold] (or Esc key) to stop anytime.[/dim]"
     )
     console.print(Panel(voice_banner, border_style="cyan", padding=(1, 2)))
     console.print("")
@@ -1417,31 +1443,57 @@ def voice_command(
     conversation_history: list[dict[str, str]] = []
 
     # Spoken greeting
-    voice.speak("Electorn Voice Assistant activated. Press Enter and speak.", async_mode=True)
+    voice.speak("Continuous voice automation activated. I am listening for your commands.", async_mode=True)
+    console.print("[dim cyan]🎙️ Continuous listening active. Speak your commands anytime hands-free...[/dim cyan]\n")
 
     while True:
         try:
-            console.print("[bold yellow]Press Enter to speak (or type a message):[/bold yellow] ", end="")
-            user_input = input().strip()
+            # Non-blocking key check on Windows for quick Esc / Q exit
+            if sys.platform == "win32":
+                try:
+                    import msvcrt
+                    if msvcrt.kbhit():
+                        key = msvcrt.getch()
+                        if key in (b'\x1b', b'q', b'Q'):
+                            automation.close_browser()
+                            console.print("\n[yellow]Exit requested via keyboard.[/yellow]")
+                            break
+                except Exception:
+                    pass
 
-            if user_input.lower() in ("/exit", "/quit", "exit", "quit"):
-                voice.speak("Voice assistant closed. Goodbye!", async_mode=False)
-                console.print("\n[yellow]Voice mode closed. Until next time! 🚀[/yellow]")
-                break
+            def mic_cb(msg: str) -> None:
+                if "Transcribing" in msg:
+                    console.print(f"[dim cyan]{msg}[/dim cyan]", end="\r")
 
-            query = ""
-            if user_input:
-                query = user_input
-            else:
-                def mic_cb(msg: str) -> None:
-                    console.print(f"[dim cyan]{msg}[/dim cyan]")
-
-                query = voice.listen_and_transcribe(record_seconds=5.0, status_cb=mic_cb) or ""
-                if not query:
-                    console.print("[dim yellow]No clear speech detected. Press Enter to try again.[/dim yellow]\n")
-                    continue
+            query = voice.listen_and_transcribe(record_seconds=4.0, status_cb=mic_cb)
+            if not query or not query.strip():
+                # Seamless continuous loop: ignore silence and keep listening
+                continue
 
             console.print(f"\n[bold cyan]You (Voice)[/bold cyan] ❯ [white]{query}[/white]")
+
+            # Exit command check
+            if any(term in query.lower() for term in ["exit", "quit", "stop listening", "stop voice", "goodbye", "bye bye"]):
+                automation.close_browser()
+                voice.speak("Continuous voice mode closed. Goodbye!", async_mode=False)
+                console.print("\n[yellow]Continuous voice assistant closed. Until next time! 🚀[/yellow]")
+                break
+
+            # Autonomous Intent Check: Selenium Browser Automation & OS Control
+            auto_res = automation.execute_intent(query)
+            if auto_res is not None:
+                if auto_res["success"]:
+                    console.print(f"⚡ [bold green][AUTONOMOUS ACTION][/bold green] [cyan]{auto_res['message']}[/cyan]")
+                else:
+                    console.print(f"⚠️  [bold yellow][ACTION NOTICE][/bold yellow] [yellow]{auto_res['message']}[/yellow]")
+
+                spoken = auto_res["spoken_response"]
+                console.print(f"🧠 [bold yellow]{current_agent.name}[/bold yellow] ❯ {spoken}\n")
+                conversation_history.append({"role": "user", "content": query})
+                conversation_history.append({"role": "assistant", "content": spoken})
+                voice.speak(spoken, async_mode=False)
+                console.print("[dim cyan]🎙️ Listening for next command...[/dim cyan]")
+                continue
 
             conversation_history.append({"role": "user", "content": query})
             if len(conversation_history) > 8:
@@ -1486,7 +1538,10 @@ def voice_command(
                 # Speak back to user
                 voice.speak(full_text, async_mode=False)
 
+            console.print("[dim cyan]🎙️ Listening for next command...[/dim cyan]")
+
         except KeyboardInterrupt:
+            automation.close_browser()
             console.print("\n[yellow]Voice mode closed.[/yellow]")
             break
         except Exception as err:

@@ -1,7 +1,8 @@
-"""Voice mode for Electorn AI: Speech-To-Text (hearing) & Text-To-Speech (speaking)."""
+"""Voice mode for Electorn AI: Speech-To-Text (hearing) & Modern Neural Text-To-Speech (speaking)."""
 
 from __future__ import annotations
 
+import asyncio
 import io
 import os
 import sys
@@ -18,9 +19,22 @@ try:
 except Exception:
     VOICE_DEPS_AVAILABLE = False
 
+try:
+    import edge_tts
+    import soundfile as sf
+    NEURAL_VOICE_AVAILABLE = True
+except Exception:
+    NEURAL_VOICE_AVAILABLE = False
+
 
 class VoiceEngine:
-    """Provides bidirectional voice interaction for Electorn AI."""
+    """Provides bidirectional voice interaction for Electorn AI using recent neural voice models."""
+
+    # Recent neural models (Edge TTS)
+    NEURAL_MODELS = {
+        "female": "en-US-AvaNeural",      # High-fidelity natural female neural voice
+        "male": "en-US-AndrewNeural",     # High-fidelity natural male neural voice
+    }
 
     def __init__(
         self,
@@ -39,13 +53,25 @@ class VoiceEngine:
         """Check if microphone capture and speech recognition are available."""
         return VOICE_DEPS_AVAILABLE
 
+    def is_neural_supported(self) -> bool:
+        """Check if Edge TTS neural voice is available."""
+        return NEURAL_VOICE_AVAILABLE
+
     def set_gender(self, gender: str) -> None:
         """Switch voice gender ('female' or 'male')."""
         if gender.lower() in ("female", "male"):
             self.voice_gender = gender.lower()
 
+    def get_active_model_name(self) -> str:
+        """Return the name of the active voice model."""
+        if NEURAL_VOICE_AVAILABLE:
+            return self.NEURAL_MODELS.get(self.voice_gender, "en-US-AvaNeural")
+        if sys.platform == "win32":
+            return "Microsoft Zira (SAPI)" if self.voice_gender == "female" else "Microsoft David (SAPI)"
+        return "System TTS"
+
     def speak(self, text: str, async_mode: bool = False) -> None:
-        """Speak out text response via native Windows SAPI TTS or cross-platform fallback."""
+        """Speak out text response via modern neural voice or native SAPI/OS fallback."""
         if not text or not text.strip():
             return
 
@@ -57,8 +83,41 @@ class VoiceEngine:
         def _tts_worker() -> None:
             with self._tts_lock:
                 self._is_speaking = True
-                try:
-                    if sys.platform == "win32":
+                success = False
+
+                # 1. Try Recent Neural Voice Model (Edge TTS)
+                if NEURAL_VOICE_AVAILABLE:
+                    try:
+                        voice_model = self.NEURAL_MODELS.get(self.voice_gender, "en-US-AvaNeural")
+                        # Run edge-tts stream asynchronously
+                        audio_buffer = io.BytesIO()
+
+                        async def _stream_tts() -> None:
+                            communicate = edge_tts.Communicate(clean_text, voice_model)
+                            async for chunk in communicate.stream():
+                                if chunk["type"] == "audio":
+                                    audio_buffer.write(chunk["data"])
+
+                        # Run event loop for edge-tts
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            loop.run_until_complete(_stream_tts())
+                        finally:
+                            loop.close()
+
+                        audio_buffer.seek(0)
+                        if audio_buffer.getbuffer().nbytes > 0:
+                            data, fs = sf.read(audio_buffer)
+                            sd.play(data, fs)
+                            sd.wait()
+                            success = True
+                    except Exception:
+                        success = False
+
+                # 2. Fallback to Native Windows SAPI if neural failed or unavailable
+                if not success and sys.platform == "win32":
+                    try:
                         try:
                             import pythoncom
                             pythoncom.CoInitialize()
@@ -66,9 +125,9 @@ class VoiceEngine:
                             pass
                         import win32com.client
                         speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                        speaker.Rate = self.speech_speed  # Speed rate (-10 to 10)
+                        speaker.Rate = self.speech_speed
 
-                        # Configure voice based on preferred gender (default: female)
+                        # Configure voice based on preferred gender
                         try:
                             voices = speaker.GetVoices()
                             selected_voice = None
@@ -99,21 +158,25 @@ class VoiceEngine:
                             pythoncom.CoUninitialize()
                         except Exception:
                             pass
-                    else:
+                        success = True
+                    except Exception:
+                        success = False
+
+                # 3. Fallback for macOS / Linux
+                if not success:
+                    try:
                         import subprocess
                         import shutil
                         if shutil.which("say"):
-                            # macOS voice selection
                             voice_opt = ["-v", "Samantha"] if self.voice_gender == "female" else ["-v", "Alex"]
                             subprocess.run(["say"] + voice_opt + [clean_text], check=False)
                         elif shutil.which("espeak"):
-                            # Linux espeak female variant
                             voice_opt = ["-v", "en+f3"] if self.voice_gender == "female" else ["-v", "en+m3"]
                             subprocess.run(["espeak"] + voice_opt + [clean_text], check=False)
-                except Exception:
-                    pass
-                finally:
-                    self._is_speaking = False
+                    except Exception:
+                        pass
+
+                self._is_speaking = False
 
         if async_mode:
             t = threading.Thread(target=_tts_worker, daemon=True)

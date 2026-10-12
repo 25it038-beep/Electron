@@ -42,6 +42,31 @@ def test_speak_empty():
     engine.speak("   \n\t  ")
 
 
+@patch("electorn.voice.NEURAL_VOICE_AVAILABLE", True)
+@patch("sounddevice.wait")
+@patch("sounddevice.play")
+@patch("soundfile.read")
+@patch("edge_tts.Communicate")
+def test_speak_neural_voice(mock_comm_cls, mock_sf_read, mock_sd_play, mock_sd_wait):
+    mock_comm = MagicMock()
+    async def _dummy_stream():
+        yield {"type": "audio", "data": b"dummy_audio_bytes"}
+    mock_comm.stream.return_value = _dummy_stream()
+    mock_comm_cls.return_value = mock_comm
+
+    mock_sf_read.return_value = (np.zeros((100,)), 24000)
+
+    engine = VoiceEngine(voice_gender="female")
+    engine.speak("Hello developer", async_mode=False)
+
+    mock_comm_cls.assert_called_once()
+    args, _ = mock_comm_cls.call_args
+    assert "Hello developer" in args[0]
+    assert args[1] == "en-US-AvaNeural"
+    mock_sd_play.assert_called_once()
+
+
+@patch("electorn.voice.NEURAL_VOICE_AVAILABLE", False)
 @patch("sys.platform", "win32")
 @patch("win32com.client.Dispatch")
 def test_speak_windows_female_voice(mock_dispatch):
