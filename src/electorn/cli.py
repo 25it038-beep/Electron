@@ -1574,6 +1574,142 @@ def voice_command(
             console.print(f"[bold red]Voice Error:[/bold red] {err}\n")
 
 
+@app.command(name="ppt", help="Autonomous production-quality PowerPoint presentation generator.")
+def ppt_command(
+    topic: Optional[str] = typer.Argument(
+        None,
+        help="Presentation topic or keynote title",
+    ),
+    slides: int = typer.Option(
+        10,
+        "--slides",
+        "-s",
+        help="Target number of slides to generate (default: 10)",
+    ),
+    style: str = typer.Option(
+        "premium-dark",
+        "--style",
+        help="Visual design style: premium-dark, minimalist-light, academic, research, corporate-pitch, data-report, cinematic",
+    ),
+    input_file: Optional[Path] = typer.Option(
+        None,
+        "--input",
+        "-i",
+        help="Input document to synthesize (PDF, DOCX, Markdown, Text)",
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Target .pptx output file path",
+    ),
+    audience: str = typer.Option(
+        "general",
+        "--audience",
+        help="Target audience profile: general, technical, executive, academic",
+    ),
+    preview: Optional[Path] = typer.Option(
+        None,
+        "--preview",
+        help="Inspect visual hierarchy and slide preview for an existing .pptx deck",
+    ),
+    inspect: Optional[Path] = typer.Option(
+        None,
+        "--inspect",
+        help="Run comprehensive QA validator and manifest audit on a .pptx deck",
+    ),
+    revise: Optional[Path] = typer.Option(
+        None,
+        "--revise",
+        help="Target .pptx deck file to revise",
+    ),
+    slide_num: Optional[int] = typer.Option(
+        None,
+        "--slide",
+        help="Specific 1-indexed slide number to revise",
+    ),
+    instruction: str = typer.Option(
+        "",
+        "--instruction",
+        help="Revision directive or refinement prompt",
+    ),
+) -> None:
+    """Production PowerPoint engine generating high-variety, editable decks."""
+    print_banner()
+    from electorn.ppt.engine import PresentationEngine
+    
+    cfg = load_config(Path("."))
+    client = OllamaClient(
+        base_url=cfg.runtime.ollama_base_url,
+        timeout=cfg.runtime.timeout_seconds,
+    )
+    engine = PresentationEngine(config=cfg, client=client)
+
+    # 1. Preview Mode
+    if preview:
+        if not preview.exists():
+            console.print(f"[bold red]❌ Presentation file not found:[/bold red] {preview}")
+            sys.exit(1)
+        engine.preview(preview, console=console)
+        return
+
+    # 2. Inspect / QA Mode
+    if inspect:
+        if not inspect.exists():
+            console.print(f"[bold red]❌ Presentation file not found:[/bold red] {inspect}")
+            sys.exit(1)
+        engine.inspect(inspect, console=console)
+        return
+
+    # 3. Revise Mode
+    if revise:
+        if not revise.exists():
+            console.print(f"[bold red]❌ Presentation file not found:[/bold red] {revise}")
+            sys.exit(1)
+        with console.status("[bold cyan]Applying autonomous revisions to presentation...[/bold cyan]", spinner="dots"):
+            revised_file = engine.revise(
+                file_path=revise,
+                slide_number=slide_num,
+                instruction=instruction,
+                style=style if style != "premium-dark" else None,
+            )
+        console.print(f"✔ [bold green]Presentation revised successfully:[/bold green] [bold white]{revised_file}[/bold white]")
+        return
+
+    # 4. Generate Deck
+    if not topic and not input_file:
+        console.print("[bold red]Please specify a topic or an input document.[/bold red]")
+        console.print("  Example: [cyan]electorn ppt \"Artificial Intelligence in Healthcare\" --slides 12[/cyan]")
+        console.print("  Example: [cyan]electorn ppt --input paper.pdf --style academic[/cyan]")
+        return
+
+    console.print(f"[bold cyan]⚡ Initializing Electorn Presentation Engine[/bold cyan]")
+    if topic:
+        console.print(f"  [bold]Topic:[/bold] {topic}")
+    if input_file:
+        console.print(f"  [bold]Input Document:[/bold] {input_file}")
+    console.print(f"  [bold]Target Slides:[/bold] {slides} • [bold]Design Style:[/bold] {style} • [bold]Audience:[/bold] {audience}\n")
+
+    with console.status("[bold cyan]Planning presentation narrative & synthesizing slide layouts...[/bold cyan]", spinner="dots"):
+        saved_pptx, qa_report = engine.generate(
+            topic=topic,
+            input_file=input_file,
+            slides_count=slides,
+            style=style,
+            output_file=output,
+            audience=audience,
+        )
+
+    console.print(f"✔ [bold green]PowerPoint Deck Generated:[/bold green] [bold white]{saved_pptx}[/bold white]")
+    console.print(f"  [dim]Slides: {qa_report.total_slides} • QA Status: {'✔ PASS' if qa_report.is_valid else '⚠ WARNINGS'}[/dim]")
+    
+    # Manifest link
+    manifest_file = Path(saved_pptx).with_suffix(".manifest.json")
+    if manifest_file.exists():
+        console.print(f"  [dim]Manifest: {manifest_file.name}[/dim]")
+    console.print("")
+
+
 def main() -> None:
     """Main CLI entrypoint."""
     app()
