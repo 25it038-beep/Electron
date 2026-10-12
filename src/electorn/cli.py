@@ -410,8 +410,20 @@ def models_command(
 
 
 @app.command(name="doctor", help="Inspect local development environment, Ollama, and runtimes.")
-def doctor_command() -> None:
+def doctor_command(
+    workspace: Path = typer.Option(
+        Path("."),
+        "--workspace",
+        "-w",
+        help="Target workspace",
+    ),
+) -> None:
     """Run full environment diagnostic check."""
+    if hasattr(workspace, "default"):
+        workspace = getattr(workspace, "default", Path("."))
+    if not isinstance(workspace, Path):
+        workspace = Path(str(workspace) if workspace else ".")
+
     print_banner()
     detector = EnvironmentDetector()
     env = detector.detect()
@@ -1086,6 +1098,13 @@ def chat_command(
     )
 
     if not client.is_available():
+        with console.status("[bold cyan]Ollama is offline. Starting Ollama daemon automatically...[/bold cyan]", spinner="dots"):
+            from providers.ollama_manager import OllamaManager
+            mgr = OllamaManager(base_url=client.base_url)
+            mgr.ensure_ready()
+            time.sleep(1.0)
+
+    if not client.is_available():
         console.print(f"[bold red]❌ Cannot connect to Ollama at {client.base_url}[/bold red]")
         sys.exit(1)
 
@@ -1404,6 +1423,13 @@ def voice_command(
         base_url=cfg.runtime.ollama_base_url,
         timeout=cfg.runtime.timeout_seconds,
     )
+
+    if not client.is_available():
+        with console.status("[bold cyan]Ollama is offline. Starting Ollama daemon automatically...[/bold cyan]", spinner="dots"):
+            from providers.ollama_manager import OllamaManager
+            mgr = OllamaManager(base_url=client.base_url)
+            mgr.ensure_ready()
+            time.sleep(1.0)
 
     if not client.is_available():
         console.print(f"[bold red]❌ Cannot connect to Ollama at {client.base_url}[/bold red]")

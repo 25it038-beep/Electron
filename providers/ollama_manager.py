@@ -68,36 +68,51 @@ class OllamaManager:
         except Exception:
             return False
 
-    def start_service(self, max_wait_sec: int = 15) -> bool:
+    def start_service(self, max_wait_sec: int = 20) -> bool:
         """Start Ollama background server daemon if not already running."""
         if self.is_running():
             logger.info("Ollama service is already active and responding.")
             return True
 
-        exe = self.find_executable()
-        if not exe:
-            logger.error("Ollama executable was not found. Cannot start service automatically.")
-            return False
-
+        exe = self.find_executable() or "ollama"
         logger.info(f"Starting Ollama daemon in background using: {exe} serve")
-        try:
-            # Spawn headless background process
-            creationflags = 0
-            if os.name == "nt":
-                # DETACHED_PROCESS or CREATE_NO_WINDOW
-                creationflags = subprocess.CREATE_NO_WINDOW
 
-            subprocess.Popen(
-                [exe, "serve"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-                creationflags=creationflags,
-                close_fds=True,
-            )
+        # Spawn headless persistent background process
+        try:
+            if os.name == "nt":
+                DETACHED = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+                CREATE_NEW_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+                flags = DETACHED | CREATE_NEW_GROUP
+                
+                # Attempt 1: Direct detached subprocess via shell
+                subprocess.Popen(
+                    f'"{exe}" serve',
+                    shell=True,
+                    creationflags=flags,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                )
+            else:
+                subprocess.Popen(
+                    [exe, "serve"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
         except Exception as e:
-            logger.error(f"Failed to spawn Ollama process: {e}")
-            return False
+            logger.warning(f"Standard spawn failed: {e}. Trying PowerShell Start-Process fallback...")
+            try:
+                if os.name == "nt":
+                    subprocess.Popen(
+                        ["powershell", "-WindowStyle", "Hidden", "-Command", "Start-Process", f'"{exe}"', "-ArgumentList", "serve", "-WindowStyle", "Hidden"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        stdin=subprocess.DEVNULL,
+                    )
+            except Exception as ps_err:
+                logger.error(f"PowerShell fallback failed: {ps_err}")
 
         # Wait until endpoint is responsive
         start_t = time.time()
