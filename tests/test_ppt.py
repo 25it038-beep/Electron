@@ -257,8 +257,73 @@ def test_cli_ppt_generation(tmp_path: Path):
         "Modern Machine Learning in Healthcare",
         "--slides", "4",
         "--style", "academic",
-        "--output", str(output_pptx)
+        "--output", str(output_pptx),
+        "--no-web-search",
     ])
     assert result.exit_code == 0
     assert output_pptx.exists()
     assert "PowerPoint Deck Generated" in result.stdout
+
+
+def test_planner_live_web_search_enrichment():
+    """Verify planner retrieves real search data and embeds verified citations."""
+    planner = PresentationPlanner()
+    plan = planner.plan_presentation(
+        topic="PostgreSQL Query Optimization",
+        target_slide_count=5,
+        style=PresentationStyle.RESEARCH,
+        use_web_search=True,
+    )
+    assert len(plan.slides) == 5
+    # Manifest metadata should record web search status
+    assert "web_search_enabled" in plan.manifest_metadata
+    
+    # Check references slide for verified citations
+    ref_slide = [s for s in plan.slides if s.layout_type == SlideLayoutType.REFERENCES][0]
+    assert len(ref_slide.citations) > 0
+
+
+def test_validator_content_verification(tmp_path: Path):
+    """Verify validator flags placeholder content and measures total word count."""
+    deck_plan = PresentationDeckPlan(
+        topic="Content Verification Test",
+        target_slide_count=4,
+        style=PresentationStyle.MINIMALIST_LIGHT,
+        slides=[
+            SlideContent(
+                slide_number=1,
+                layout_type=SlideLayoutType.TITLE,
+                title="Verified Research Deck",
+                subtitle="Empirical Study",
+            ),
+            SlideContent(
+                slide_number=2,
+                layout_type=SlideLayoutType.EDITORIAL,
+                title="System Overview",
+                bullets=["Lorem Ipsum dolor sit amet", "Legitimate factual bullet point"],
+            ),
+            SlideContent(
+                slide_number=3,
+                layout_type=SlideLayoutType.STATISTICS,
+                title="Metrics",
+                metrics=[KeyMetric(value="10x", label="Speedup", description="Validated benchmark")],
+            ),
+            SlideContent(
+                slide_number=4,
+                layout_type=SlideLayoutType.CLOSING,
+                title="Conclusion",
+                bullets=["All conclusions verified"],
+            ),
+        ]
+    )
+
+    builder = PowerPointBuilder(style=PresentationStyle.MINIMALIST_LIGHT)
+    out_file = tmp_path / "placeholder_test.pptx"
+    builder.build_deck(deck_plan, out_file)
+
+    qa_report = PresentationQAValidator.validate_file(out_file)
+    assert qa_report.is_valid is True  # Warning does not fail validity
+    assert any("placeholder" in issue.message.lower() for issue in qa_report.issues)
+    assert "total_words" in qa_report.manifest
+    assert qa_report.manifest["total_words"] > 0
+

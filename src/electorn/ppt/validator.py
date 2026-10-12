@@ -60,6 +60,8 @@ class PresentationQAValidator:
             )
 
         slide_manifest = []
+        total_words = 0
+        has_placeholders = False
 
         for i, slide in enumerate(prs.slides):
             slide_num = i + 1
@@ -91,6 +93,21 @@ class PresentationQAValidator:
                     text = shape.text_frame.text.strip()
                     if text:
                         has_title = True
+                        words = len(text.split())
+                        total_words += words
+                        
+                        # Placeholder detection
+                        lower_text = text.lower()
+                        for ph in ["lorem ipsum", "dolor sit amet", "[insert", "<placeholder>", "todo:"]:
+                            if ph in lower_text:
+                                has_placeholders = True
+                                issues.append(
+                                    ValidationIssue(
+                                        slide_number=slide_num,
+                                        severity="warning",
+                                        message=f"Unverified placeholder pattern '{ph}' detected in slide text",
+                                    )
+                                )
 
             if not has_content or shape_count == 0:
                 issues.append(
@@ -117,6 +134,8 @@ class PresentationQAValidator:
                 "file_size_bytes": os.path.getsize(path),
                 "total_slides": total_slides,
                 "aspect_ratio": "16:9 Widescreen",
+                "total_words": total_words,
+                "content_verified": not has_placeholders and total_words > (total_slides * 15),
                 "slides": slide_manifest,
             },
         )

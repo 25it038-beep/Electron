@@ -59,6 +59,11 @@ class WebSearchEngine:
         if results:
             return results
 
+        # Strategy 3: Wikipedia OpenSearch & Summary API
+        results = self._search_wikipedia_encyclopedic(clean_query, max_results)
+        if results:
+            return results
+
         return []
 
     def _search_duckduckgo_html(self, query: str, max_results: int) -> list[SearchResult]:
@@ -128,7 +133,7 @@ class WebSearchEngine:
             url = f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json&no_html=1&skip_disambig=1"
             with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
                 resp = client.get(url, headers=self.headers)
-                if resp.status_code != 200:
+                if resp.status_code not in (200, 202):
                     return []
                 data = resp.json()
 
@@ -159,6 +164,46 @@ class WebSearchEngine:
                             snippet=topic.get("Text", ""),
                         )
                     )
+
+            return results
+        except Exception:
+            return []
+
+    def _search_wikipedia_encyclopedic(self, query: str, max_results: int) -> list[SearchResult]:
+        """Query Wikipedia OpenSearch and REST Summary APIs for authoritative reference summaries."""
+        try:
+            url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={urllib.parse.quote(query)}&limit={max_results}&namespace=0&format=json"
+            with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+                resp = client.get(url, headers={"User-Agent": "Electorn/0.1.0"})
+                if resp.status_code != 200:
+                    return []
+                data = resp.json()
+
+            if not isinstance(data, list) or len(data) < 4:
+                return []
+
+            titles = data[1]
+            descriptions = data[2]
+            urls = data[3]
+            results: list[SearchResult] = []
+
+            for i in range(min(len(titles), max_results)):
+                t = titles[i]
+                u = urls[i]
+                desc = descriptions[i] if i < len(descriptions) else ""
+
+                if not desc or len(desc) < 20:
+                    try:
+                        sum_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(t.replace(' ', '_'))}"
+                        with httpx.Client(timeout=4.0, follow_redirects=True) as client:
+                            s_resp = client.get(sum_url, headers={"User-Agent": "Electorn/0.1.0"})
+                            if s_resp.status_code == 200:
+                                desc = s_resp.json().get("extract", "")
+                    except Exception:
+                        pass
+
+                if desc:
+                    results.append(SearchResult(title=t, url=u, snippet=desc))
 
             return results
         except Exception:

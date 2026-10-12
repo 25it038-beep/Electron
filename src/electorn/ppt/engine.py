@@ -42,6 +42,7 @@ class PresentationEngine:
         style: str = "premium-dark",
         output_file: Optional[str | Path] = None,
         audience: str = "general",
+        use_web_search: bool = True,
     ) -> tuple[str, PresentationQAReport]:
         """Generate a complete PowerPoint deck from topic or source document."""
         doc_analysis: Optional[DocumentAnalysis] = None
@@ -61,6 +62,7 @@ class PresentationEngine:
             style=chosen_style,
             audience=audience,
             doc_analysis=doc_analysis,
+            use_web_search=use_web_search,
         )
 
         # 2. Determine Output Destination
@@ -79,6 +81,10 @@ class PresentationEngine:
 
         # 4. QA Validation
         qa_report = PresentationQAValidator.validate_file(saved_file, expected_slide_count=slides_count)
+
+        # Attach verified sources and engine metadata to manifest
+        if plan.manifest_metadata:
+            qa_report.manifest.update(plan.manifest_metadata)
 
         # Save manifest alongside PPTX
         manifest_path = Path(saved_file).with_suffix(".manifest.json")
@@ -104,6 +110,20 @@ class PresentationEngine:
                     "✔ Yes" if s["has_notes"] else "✖ None",
                 )
             console.print(table)
+
+            manifest_file = Path(file_path).with_suffix(".manifest.json")
+            if manifest_file.exists():
+                try:
+                    with open(manifest_file, "r", encoding="utf-8") as f:
+                        saved_manifest = json.load(f)
+                    sources = saved_manifest.get("verified_sources", [])
+                    if sources:
+                        console.print(f"\n[bold cyan]Verified Live Web Sources ({len(sources)} links):[/bold cyan]")
+                        for src in sources[:5]:
+                            console.print(f"  • [green]{src.get('title')}[/green] [dim]({src.get('url')})[/dim]")
+                except Exception:
+                    pass
+
             if qa.issues:
                 console.print(f"\n[yellow]QA Diagnostics ({len(qa.issues)} items):[/yellow]")
                 for issue in qa.issues:

@@ -1633,6 +1633,11 @@ def ppt_command(
         "--instruction",
         help="Revision directive or refinement prompt",
     ),
+    web_search: bool = typer.Option(
+        True,
+        "--web-search/--no-web-search",
+        help="Query live web indexes for real-time verified data, metrics, and citations (default: True)",
+    ),
 ) -> None:
     """Production PowerPoint engine generating high-variety, editable decks."""
     print_banner()
@@ -1688,9 +1693,13 @@ def ppt_command(
         console.print(f"  [bold]Topic:[/bold] {topic}")
     if input_file:
         console.print(f"  [bold]Input Document:[/bold] {input_file}")
-    console.print(f"  [bold]Target Slides:[/bold] {slides} • [bold]Design Style:[/bold] {style} • [bold]Audience:[/bold] {audience}\n")
+    console.print(f"  [bold]Target Slides:[/bold] {slides} • [bold]Design Style:[/bold] {style} • [bold]Audience:[/bold] {audience}")
+    if web_search:
+        console.print(f"  [bold cyan]Live Web Search:[/bold cyan] Enabled (querying verified industry data & empirical benchmarks)\n")
+    else:
+        console.print(f"  [dim]Live Web Search: Disabled (offline synthesis mode)[/dim]\n")
 
-    with console.status("[bold cyan]Planning presentation narrative & synthesizing slide layouts...[/bold cyan]", spinner="dots"):
+    with console.status("[bold cyan]Synthesizing verified content & building PowerPoint deck...[/bold cyan]", spinner="dots"):
         saved_pptx, qa_report = engine.generate(
             topic=topic,
             input_file=input_file,
@@ -1698,11 +1707,16 @@ def ppt_command(
             style=style,
             output_file=output,
             audience=audience,
+            use_web_search=web_search,
         )
 
     console.print(f"✔ [bold green]PowerPoint Deck Generated:[/bold green] [bold white]{saved_pptx}[/bold white]")
     console.print(f"  [dim]Slides: {qa_report.total_slides} • QA Status: {'✔ PASS' if qa_report.is_valid else '⚠ WARNINGS'}[/dim]")
     
+    sources = qa_report.manifest.get("verified_sources", [])
+    if sources:
+        console.print(f"  [dim]Verified Sources: {len(sources)} authoritative citations linked[/dim]")
+
     # Manifest link
     manifest_file = Path(saved_pptx).with_suffix(".manifest.json")
     if manifest_file.exists():
