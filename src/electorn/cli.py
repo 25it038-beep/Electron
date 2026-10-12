@@ -1638,6 +1638,21 @@ def ppt_command(
         "--web-search/--no-web-search",
         help="Query live web indexes for real-time verified data, metrics, and citations (default: True)",
     ),
+    provider: Optional[str] = typer.Option(
+        None,
+        "--provider",
+        help="AI Provider for presentation generation: 'nvidia' (Cloud NIM) or 'ollama' (Local)",
+    ),
+    mode: str = typer.Option(
+        "professional",
+        "--mode",
+        help="Quality mode: 'economy', 'professional', 'maximum'",
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        "--model",
+        help="Specific model identifier override for presentation generation",
+    ),
 ) -> None:
     """Production PowerPoint engine generating high-variety, editable decks."""
     print_banner()
@@ -1650,7 +1665,17 @@ def ppt_command(
     )
     engine = PresentationEngine(config=cfg, client=client)
 
-    # 1. Preview Mode
+    # 1. Models Registry Command
+    if topic in ("models", "registry"):
+        engine.display_models(console=console)
+        return
+
+    # 2. Doctor Diagnostics Command
+    if topic in ("doctor", "diagnostics"):
+        engine.run_doctor(console=console)
+        return
+
+    # 3. Preview Mode
     if preview:
         if not preview.exists():
             console.print(f"[bold red]❌ Presentation file not found:[/bold red] {preview}")
@@ -1658,7 +1683,7 @@ def ppt_command(
         engine.preview(preview, console=console)
         return
 
-    # 2. Inspect / QA Mode
+    # 4. Inspect / QA Mode
     if inspect:
         if not inspect.exists():
             console.print(f"[bold red]❌ Presentation file not found:[/bold red] {inspect}")
@@ -1666,7 +1691,7 @@ def ppt_command(
         engine.inspect(inspect, console=console)
         return
 
-    # 3. Revise Mode
+    # 5. Revise Mode
     if revise:
         if not revise.exists():
             console.print(f"[bold red]❌ Presentation file not found:[/bold red] {revise}")
@@ -1681,25 +1706,29 @@ def ppt_command(
         console.print(f"✔ [bold green]Presentation revised successfully:[/bold green] [bold white]{revised_file}[/bold white]")
         return
 
-    # 4. Generate Deck
+    # 6. Generate Deck
     if not topic and not input_file:
         console.print("[bold red]Please specify a topic or an input document.[/bold red]")
         console.print("  Example: [cyan]electorn ppt \"Artificial Intelligence in Healthcare\" --slides 12[/cyan]")
-        console.print("  Example: [cyan]electorn ppt --input paper.pdf --style academic[/cyan]")
+        console.print("  Example: [cyan]electorn ppt \"DBMS Query Optimization\" --provider nvidia --mode maximum[/cyan]")
+        console.print("  Example: [cyan]electorn ppt models[/cyan]")
+        console.print("  Example: [cyan]electorn ppt doctor[/cyan]")
         return
 
+    active_prov = engine.resolve_provider(provider)
     console.print(f"[bold cyan]⚡ Initializing Electorn Presentation Engine[/bold cyan]")
     if topic:
         console.print(f"  [bold]Topic:[/bold] {topic}")
     if input_file:
         console.print(f"  [bold]Input Document:[/bold] {input_file}")
+    console.print(f"  [bold]Provider:[/bold] {active_prov.upper()} • [bold]Quality Mode:[/bold] {mode}")
     console.print(f"  [bold]Target Slides:[/bold] {slides} • [bold]Design Style:[/bold] {style} • [bold]Audience:[/bold] {audience}")
     if web_search:
         console.print(f"  [bold cyan]Live Web Search:[/bold cyan] Enabled (querying verified industry data & empirical benchmarks)\n")
     else:
         console.print(f"  [dim]Live Web Search: Disabled (offline synthesis mode)[/dim]\n")
 
-    with console.status("[bold cyan]Synthesizing verified content & building PowerPoint deck...[/bold cyan]", spinner="dots"):
+    with console.status(f"[bold cyan]Synthesizing presentation via {active_prov.upper()} AI & building deck...[/bold cyan]", spinner="dots"):
         saved_pptx, qa_report = engine.generate(
             topic=topic,
             input_file=input_file,
@@ -1708,6 +1737,9 @@ def ppt_command(
             output_file=output,
             audience=audience,
             use_web_search=web_search,
+            provider=provider,
+            quality_mode=mode,
+            model=model,
         )
 
     console.print(f"✔ [bold green]PowerPoint Deck Generated:[/bold green] [bold white]{saved_pptx}[/bold white]")
