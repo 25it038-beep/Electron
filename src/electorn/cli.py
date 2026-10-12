@@ -124,11 +124,11 @@ def default_callback(ctx: typer.Context) -> None:
             if user_prompt.strip():
                 run_development_pipeline(prompt=user_prompt.strip(), workspace=Path("."))
         elif choice == "2":
-            chat_command()
+            chat_command(workspace=Path("."))
         elif choice == "3":
-            voice_command()
+            voice_command(workspace=Path("."))
         elif choice == "4":
-            doctor_command()
+            doctor_command(workspace=Path("."))
         elif choice == "5":
             studio_command()
         else:
