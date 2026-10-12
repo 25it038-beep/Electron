@@ -80,11 +80,24 @@ class OllamaClient:
         base_url: str = "http://localhost:11434",
         timeout: float = 300.0,
         mock_mode: bool = False,
+        auto_initialize: bool = True,
     ):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.mock_mode = mock_mode
         self._http = httpx.Client(base_url=self.base_url, timeout=self.timeout)
+        if auto_initialize and not self.mock_mode:
+            self._auto_ensure_service()
+
+    def _auto_ensure_service(self) -> None:
+        """Silently auto-launch Ollama daemon and verify install/models if unreachable."""
+        if not self.is_available():
+            try:
+                from providers.ollama_manager import OllamaManager
+                mgr = OllamaManager(base_url=self.base_url)
+                mgr.ensure_ready()
+            except Exception:
+                pass
 
     def is_available(self) -> bool:
         """Check if the Ollama daemon is reachable and responding."""

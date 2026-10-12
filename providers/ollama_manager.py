@@ -173,10 +173,76 @@ class OllamaManager:
             except Exception as cli_err:
                 logger.error(f"CLI pull error: {cli_err}")
 
-        return False
+    def install_ollama(self, timeout_sec: int = 300) -> bool:
+        """Automatically install Ollama if not present on the PC."""
+        logger.info("Ollama is not installed. Initiating automated installation...")
+
+        # Strategy 1: Windows Package Manager (winget)
+        if shutil.which("winget"):
+            try:
+                logger.info("Attempting automated installation via Windows Package Manager (winget)...")
+                proc = subprocess.run(
+                    [
+                        "winget", "install", "--id", "Ollama.Ollama",
+                        "-e", "--silent", "--accept-source-agreements", "--accept-package-agreements"
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_sec,
+                )
+                if proc.returncode == 0:
+                    logger.info("winget successfully installed Ollama.")
+                    time.sleep(3.0)
+                    if self.find_executable():
+                        return True
+            except Exception as w_err:
+                logger.warning(f"winget installation encountered: {w_err}")
+
+        # Strategy 2: Direct Official Windows Installer Download & Silent Execution
+        try:
+            logger.info("Downloading official Ollama Windows installer from https://ollama.com/download/OllamaSetup.exe...")
+            installer_url = "https://ollama.com/download/OllamaSetup.exe"
+            temp_dir = os.environ.get("TEMP", os.path.expanduser("~"))
+            installer_path = os.path.join(temp_dir, "OllamaSetup.exe")
+
+            # Download executable installer
+            urllib.request.urlretrieve(installer_url, installer_path)
+            if os.path.exists(installer_path) and os.path.getsize(installer_path) > 1024 * 1024:
+                logger.info("Running Ollama installer silently...")
+                run_proc = subprocess.run(
+                    [installer_path, "/DIR=" + os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Ollama")],
+                    capture_output=True,
+                    timeout=timeout_sec,
+                )
+                time.sleep(4.0)
+                if self.find_executable():
+                    logger.info("Ollama executable discovered following direct installation.")
+                    return True
+        except Exception as d_err:
+            logger.error(f"Direct download/install failed: {d_err}")
+
+        # Strategy 3: Linux / macOS automatic curl script
+        if os.name != "nt":
+            try:
+                logger.info("Running curl -fsSL https://ollama.com/install.sh | sh...")
+                proc = subprocess.run(
+                    ["sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"],
+                    capture_output=True,
+                    timeout=timeout_sec,
+                )
+                if proc.returncode == 0:
+                    return True
+            except Exception as u_err:
+                logger.error(f"Unix installation error: {u_err}")
+
+        return self.is_installed()
 
     def ensure_ready(self, target_model: Optional[str] = None) -> dict[str, Any]:
         """Ensure Ollama is installed, running, and has the specified model ready.
+        
+        If Ollama is missing, automatically installs it.
+        If the daemon is inactive, automatically launches it.
+        If the model is missing, automatically pulls it.
         
         Returns a summary status dictionary:
         {
@@ -189,30 +255,33 @@ class OllamaManager:
         """
         model = target_model or self.preferred_model
 
-        # 1. Verify installation
+        # 1. Verify installation, or auto-install if missing on this PC
         if not self.is_installed():
-            return {
-                "installed": False,
-                "running": False,
-                "model_ready": False,
-                "active_model": model,
-                "message": (
-                    "Ollama is not installed. Please install Ollama from https://ollama.com/download "
-                    "or run 'winget install Ollama.Ollama'."
-                ),
-            }
+            logger.info("Ollama not found on this computer. Beginning automatic zero-touch installation...")
+            installed = self.install_ollama()
+            if not installed:
+                return {
+                    "installed": False,
+                    "running": False,
+                    "model_ready": False,
+                    "active_model": model,
+                    "message": (
+                        "Ollama was not found and automatic installation could not be completed. "
+                        "Please install Ollama manually from https://ollama.com/download."
+                    ),
+                }
 
         # 2. Ensure running
         if not self.is_running():
-            logger.info("Ollama is installed but not running. Launching automatically...")
-            started = self.start_service(max_wait_sec=15)
+            logger.info("Ollama is installed but daemon is not active. Launching automatically...")
+            started = self.start_service(max_wait_sec=20)
             if not started:
                 return {
                     "installed": True,
                     "running": False,
                     "model_ready": False,
                     "active_model": model,
-                    "message": "Failed to auto-start Ollama server.",
+                    "message": "Failed to auto-start Ollama server daemon.",
                 }
 
         # 3. Verify models
