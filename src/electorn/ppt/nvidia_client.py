@@ -56,8 +56,43 @@ class NvidiaCloudClient:
             or os.environ.get("NVIDIA_API_KEY")
             or os.environ.get("ELECTORN_NVIDIA_API_KEY")
         )
+        if not self.api_key:
+            self.api_key = self._discover_api_key()
+
         self.base_url = (base_url or os.environ.get("NVIDIA_BASE_URL") or self.DEFAULT_BASE_URL).rstrip("/")
         self.timeout = timeout or self.DEFAULT_TIMEOUT
+
+    @staticmethod
+    def _discover_api_key() -> Optional[str]:
+        """Discover NVIDIA_API_KEY from Windows User Registry or config/.env files."""
+        # 1. On Windows, check HKEY_CURRENT_USER\Environment
+        if os.name == "nt":
+            try:
+                import winreg
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment") as key:
+                    val, _ = winreg.QueryValueEx(key, "NVIDIA_API_KEY")
+                    if val and str(val).strip():
+                        return str(val).strip()
+            except Exception:
+                pass
+
+        # 2. Check ~/.electorn/.env, ~/.electorn/config.yaml, and local .env
+        from pathlib import Path
+        candidate_files = [
+            Path.home() / ".electorn" / ".env",
+            Path.home() / ".electorn" / "config.yaml",
+            Path(".env"),
+        ]
+        for path in candidate_files:
+            if path.is_file():
+                try:
+                    text = path.read_text(encoding="utf-8")
+                    match = re.search(r'(?:NVIDIA_API_KEY|nvidia_api_key)\s*[:=]\s*["\']?([^"\'\r\n\s]+)["\']?', text)
+                    if match:
+                        return match.group(1).strip()
+                except Exception:
+                    pass
+        return None
 
     @property
     def is_configured(self) -> bool:

@@ -1728,19 +1728,23 @@ def ppt_command(
     else:
         console.print(f"  [dim]Live Web Search: Disabled (offline synthesis mode)[/dim]\n")
 
-    with console.status(f"[bold cyan]Synthesizing presentation via {active_prov.upper()} AI & building deck...[/bold cyan]", spinner="dots"):
-        saved_pptx, qa_report = engine.generate(
-            topic=topic,
-            input_file=input_file,
-            slides_count=slides,
-            style=style,
-            output_file=output,
-            audience=audience,
-            use_web_search=web_search,
-            provider=provider,
-            quality_mode=mode,
-            model=model,
-        )
+    try:
+        with console.status(f"[bold cyan]Synthesizing presentation via {active_prov.upper()} AI & building deck...[/bold cyan]", spinner="dots"):
+            saved_pptx, qa_report = engine.generate(
+                topic=topic,
+                input_file=input_file,
+                slides_count=slides,
+                style=style,
+                output_file=output,
+                audience=audience,
+                use_web_search=web_search,
+                provider=provider,
+                quality_mode=mode,
+                model=model,
+            )
+    except Exception as exc:
+        console.print(f"\n[bold red]✖ Presentation Generation Error:[/bold red] {exc}\n")
+        return
 
     console.print(f"✔ [bold green]PowerPoint Deck Generated:[/bold green] [bold white]{saved_pptx}[/bold white]")
     console.print(f"  [dim]Slides: {qa_report.total_slides} • QA Status: {'✔ PASS' if qa_report.is_valid else '⚠ WARNINGS'}[/dim]")
