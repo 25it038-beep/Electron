@@ -23,7 +23,8 @@ except Exception:
 
 try:
     import pyautogui
-    pyautogui.FAILSAFE = True
+    pyautogui.FAILSAFE = False
+    pyautogui.PAUSE = 0.05
     PYAUTOGUI_AVAILABLE = True
 except Exception:
     PYAUTOGUI_AVAILABLE = False
@@ -498,6 +499,97 @@ class AutomationEngine:
         except Exception as err:
             return f"Error pressing key: {err}"
 
+    def click_mouse(self, button: str = "left", clicks: int = 1) -> str:
+        """Click mouse button at current position or focus."""
+        if not PYAUTOGUI_AVAILABLE:
+            return "Mouse control requires pyautogui."
+        try:
+            pyautogui.click(button=button, clicks=clicks)
+            btn_str = "Double-clicked" if clicks == 2 else f"Clicked {button} mouse button"
+            return btn_str
+        except Exception as err:
+            return f"Error clicking mouse: {err}"
+
+    def right_click_mouse(self) -> str:
+        """Right-click mouse button."""
+        return self.click_mouse(button="right", clicks=1)
+
+    def double_click_mouse(self) -> str:
+        """Double-click mouse button."""
+        return self.click_mouse(button="left", clicks=2)
+
+    def move_mouse(self, direction_or_target: str, distance: int = 200) -> str:
+        """Move mouse cursor smoothly (up, down, left, right, center)."""
+        if not PYAUTOGUI_AVAILABLE:
+            return "Mouse control requires pyautogui."
+        try:
+            curr_x, curr_y = pyautogui.position()
+            screen_w, screen_h = pyautogui.size()
+            d = direction_or_target.strip().lower()
+            if d == "center":
+                target_x, target_y = screen_w // 2, screen_h // 2
+            elif d in ("up", "top"):
+                target_x, target_y = curr_x, max(0, curr_y - distance)
+            elif d in ("down", "bottom"):
+                target_x, target_y = curr_x, min(screen_h - 1, curr_y + distance)
+            elif d == "left":
+                target_x, target_y = max(0, curr_x - distance), curr_y
+            elif d == "right":
+                target_x, target_y = min(screen_w - 1, curr_x + distance), curr_y
+            else:
+                return f"Unknown move direction: {direction_or_target}"
+
+            pyautogui.moveTo(target_x, target_y, duration=0.25)
+            return f"Moved mouse cursor to ({target_x}, {target_y})."
+        except Exception as err:
+            return f"Error moving mouse: {err}"
+
+    def execute_hotkey(self, *keys: str) -> str:
+        """Trigger complex keyboard shortcut (e.g. ctrl+c, ctrl+v, win+d, alt+tab)."""
+        if not PYAUTOGUI_AVAILABLE:
+            return "Keyboard hotkeys require pyautogui."
+        try:
+            pyautogui.hotkey(*keys)
+            return f"Triggered hotkey: {' + '.join(keys).upper()}"
+        except Exception as err:
+            return f"Error executing hotkey: {err}"
+
+    def select_all(self) -> str:
+        """Select all content in focused application (Ctrl+A)."""
+        return self.execute_hotkey("ctrl", "a")
+
+    def copy_selection(self) -> str:
+        """Copy selected text/item (Ctrl+C)."""
+        return self.execute_hotkey("ctrl", "c")
+
+    def paste_selection(self) -> str:
+        """Paste from clipboard (Ctrl+V)."""
+        return self.execute_hotkey("ctrl", "v")
+
+    def undo_action(self) -> str:
+        """Undo last action (Ctrl+Z)."""
+        return self.execute_hotkey("ctrl", "z")
+
+    def save_file_hotkey(self) -> str:
+        """Save file in focused application (Ctrl+S)."""
+        return self.execute_hotkey("ctrl", "s")
+
+    def new_tab_or_file(self) -> str:
+        """Open new tab or document (Ctrl+T or Ctrl+N)."""
+        return self.execute_hotkey("ctrl", "t")
+
+    def close_tab(self) -> str:
+        """Close current browser tab or document (Ctrl+W)."""
+        return self.execute_hotkey("ctrl", "w")
+
+    def reopen_tab(self) -> str:
+        """Reopen last closed browser tab (Ctrl+Shift+T)."""
+        return self.execute_hotkey("ctrl", "shift", "t")
+
+    def open_start_menu(self) -> str:
+        """Open Windows Start Menu (Win key)."""
+        return self.press_key("win")
+
     def get_clipboard(self) -> str:
         """Read text from system clipboard."""
         if PYPERCLIP_AVAILABLE:
@@ -766,10 +858,84 @@ class AutomationEngine:
             return {"action": "type_text", "success": True, "message": msg, "spoken_response": f"Typed '{text_to_type}'."}
 
         # 16. Key Press: "press enter", "press space", "press escape"
-        press_match = re.match(r"^press\s+(enter|space|escape|esc|tab|backspace)\b", lower)
+        press_match = re.match(r"^(?:press|hit|type)\s+(enter|space|spacebar|escape|esc|tab|backspace|delete|up|down|left|right)\b", lower)
         if press_match:
             k = press_match.group(1).strip()
+            if k == "spacebar":
+                k = "space"
             msg = self.press_key(k)
             return {"action": "press_key", "success": True, "message": msg, "spoken_response": f"Pressed {k} key."}
+
+        # 17. Hands-Free Mouse Clicking & Interaction
+        if any(lower == phrase for phrase in ["click", "left click", "click here", "press click", "click mouse"]):
+            msg = self.click_mouse("left", 1)
+            return {"action": "click", "success": True, "message": msg, "spoken_response": "Clicked."}
+
+        if any(lower == phrase for phrase in ["double click", "double click here", "open this"]):
+            msg = self.double_click_mouse()
+            return {"action": "double_click", "success": True, "message": msg, "spoken_response": "Double clicked."}
+
+        if any(lower == phrase for phrase in ["right click", "context menu"]):
+            msg = self.right_click_mouse()
+            return {"action": "right_click", "success": True, "message": msg, "spoken_response": "Right clicked."}
+
+        # 18. Hands-Free Cursor Movement: "move mouse up", "cursor down", "move cursor center"
+        move_match = re.match(r"^(?:move\s+(?:mouse|cursor)|cursor|mouse)\s+(up|down|left|right|center|top|bottom)\b", lower)
+        if move_match:
+            dir_target = move_match.group(1).strip()
+            msg = self.move_mouse(dir_target, distance=250)
+            return {"action": "move_mouse", "success": True, "message": msg, "spoken_response": f"Moved cursor {dir_target}."}
+
+        # 19. Hands-Free Editing & Document Shortcuts: Select All, Copy, Paste, Undo, Save
+        if any(lower == phrase for phrase in ["select all", "highlight all"]):
+            msg = self.select_all()
+            return {"action": "select_all", "success": True, "message": msg, "spoken_response": "Selected all content."}
+
+        if any(lower == phrase for phrase in ["copy", "copy this", "copy text"]):
+            msg = self.copy_selection()
+            return {"action": "copy", "success": True, "message": msg, "spoken_response": "Copied to clipboard."}
+
+        if any(lower == phrase for phrase in ["paste", "paste text", "paste here"]):
+            msg = self.paste_selection()
+            return {"action": "paste", "success": True, "message": msg, "spoken_response": "Pasted."}
+
+        if any(lower == phrase for phrase in ["undo", "undo that", "revert"]):
+            msg = self.undo_action()
+            return {"action": "undo", "success": True, "message": msg, "spoken_response": "Undone."}
+
+        if any(lower == phrase for phrase in ["save", "save file", "save document"]):
+            msg = self.save_file_hotkey()
+            return {"action": "save_file", "success": True, "message": msg, "spoken_response": "Saved document."}
+
+        # 20. Hands-Free Browser Tab Management
+        if any(lower == phrase for phrase in ["new tab", "open new tab", "create tab"]):
+            msg = self.new_tab_or_file()
+            return {"action": "new_tab", "success": True, "message": msg, "spoken_response": "Opened new tab."}
+
+        if any(lower == phrase for phrase in ["close tab", "kill tab", "exit tab"]):
+            msg = self.close_tab()
+            return {"action": "close_tab", "success": True, "message": msg, "spoken_response": "Closed tab."}
+
+        if any(lower == phrase for phrase in ["reopen tab", "restore tab", "undo close tab"]):
+            msg = self.reopen_tab()
+            return {"action": "reopen_tab", "success": True, "message": msg, "spoken_response": "Reopened previous tab."}
+
+        # 21. Start Menu & Windows Shell
+        if any(lower == phrase for phrase in ["start menu", "open start", "windows menu", "press windows"]):
+            msg = self.open_start_menu()
+            return {"action": "start_menu", "success": True, "message": msg, "spoken_response": "Opened Start menu."}
+
+        # 22. Autonomous Entertainment / Media: "play X on youtube", "play X on spotify"
+        yt_play_match = re.match(r"^play\s+(.+?)(?:\s+on\s+youtube)?$", lower)
+        if yt_play_match and not any(lower == p for p in ["play music", "play pause", "play"]):
+            yt_query = yt_play_match.group(1).strip()
+            yt_url = f"https://www.youtube.com/results?search_query={quote_plus(yt_query)}"
+            msg = self.open_url(yt_url, headless=False)
+            return {
+                "action": "play_youtube",
+                "success": True,
+                "message": msg,
+                "spoken_response": f"Playing '{yt_query}' on YouTube in your browser.",
+            }
 
         return None

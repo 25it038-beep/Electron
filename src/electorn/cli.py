@@ -1474,10 +1474,15 @@ def voice_command(
         f"Active Neural Engine: [bold green]{profile.name}[/bold green] ({profile.description})\n"
         f"Active Persona: 🧠 [bold yellow]{current_agent.name}[/bold yellow] ({current_agent.role})\n"
         f"Recent Voice Model: [bold magenta]{active_voice_model}[/bold magenta] (Natural Female Neural Voice)\n"
-        f"Mode: [bold green]Continuous Hands-Free Listening & Automation Active[/bold green]\n"
-        f"Automation: [bold cyan]Selenium Web Browser Control & Desktop OS Automation[/bold cyan]\n\n"
-        f"[dim]Speak any command hands-free (e.g. 'open youtube', 'scroll down', 'search for AI on google', 'open notepad').\n"
-        f"Say [bold]'exit'[/bold], [bold]'quit'[/bold], or press [bold]Ctrl+C[/bold] (or Esc key) to stop anytime.[/dim]"
+        f"Mode: [bold green]100% Hands-Free Accessibility & OS Automation Active[/bold green]\n"
+        f"Automation: [bold cyan]Mouse Click/Move • Typing • Apps • Web Browser • Media • Windows Control[/bold cyan]\n\n"
+        f"[dim]Speak any command hands-free:\n"
+        f"  • Mouse: 'click', 'double click', 'right click', 'move cursor center/up/down/left/right'\n"
+        f"  • Keyboard: 'type <text>', 'press enter', 'select all', 'copy', 'paste', 'undo', 'save'\n"
+        f"  • Apps: 'open notepad', 'open chrome', 'open calc', 'open terminal', 'start menu', 'close notepad'\n"
+        f"  • Browser: 'open youtube', 'search for <topic>', 'scroll down', 'new tab', 'close tab'\n"
+        f"  • OS: 'volume up/down', 'play music', 'next song', 'minimize all', 'system info', 'lock pc'\n"
+        f"Say [bold]'exit'[/bold], [bold]'quit'[/bold], or press [bold]Esc / Ctrl+C[/bold] to exit.[/dim]"
     )
     console.print(Panel(voice_banner, border_style="cyan", padding=(1, 2)))
     console.print("")
@@ -1543,9 +1548,9 @@ def voice_command(
 
             chat_system = (
                 f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Voice Assistant mode. "
-                f"You are communicating verbally with the user. "
-                f"Keep answers clear, concise, conversational, and direct (2-4 sentences where possible) "
-                f"so they are comfortable and natural to listen to aloud. Avoid reading long code blocks."
+                f"You are assisting a hands-free user who cannot use their hands or mouse/keyboard physically. "
+                f"Be exceptionally helpful, clear, and proactive. Keep verbal replies concise and direct (2-3 sentences). "
+                f"If the user asks to perform an action on the computer that you can guide or perform, inform them clearly."
             )
 
             streamed_chunks: list[str] = []

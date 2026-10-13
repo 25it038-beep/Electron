@@ -141,3 +141,58 @@ def test_execute_intent_non_automation():
     engine = AutomationEngine()
     res = engine.execute_intent("Can you explain how machine learning models work?")
     assert res is None
+
+
+def test_execute_intent_hands_free_mouse_and_hotkeys():
+    engine = AutomationEngine()
+    
+    with patch.object(engine, "click_mouse", return_value="Clicked left mouse button"):
+        res = engine.execute_intent("click")
+        assert res is not None
+        assert res["action"] == "click"
+        assert res["success"] is True
+
+    with patch.object(engine, "double_click_mouse", return_value="Double-clicked"):
+        res = engine.execute_intent("double click")
+        assert res is not None
+        assert res["action"] == "double_click"
+
+    with patch.object(engine, "right_click_mouse", return_value="Right clicked"):
+        res = engine.execute_intent("right click")
+        assert res is not None
+        assert res["action"] == "right_click"
+
+    with patch.object(engine, "move_mouse", return_value="Moved cursor center"):
+        res = engine.execute_intent("move cursor center")
+        assert res is not None
+        assert res["action"] == "move_mouse"
+
+    with patch.object(engine, "select_all", return_value="Triggered hotkey: CTRL + A"):
+        res = engine.execute_intent("select all")
+        assert res is not None
+        assert res["action"] == "select_all"
+
+    with patch.object(engine, "copy_selection", return_value="Triggered hotkey: CTRL + C"):
+        res = engine.execute_intent("copy text")
+        assert res is not None
+        assert res["action"] == "copy"
+
+    with patch.object(engine, "paste_selection", return_value="Triggered hotkey: CTRL + V"):
+        res = engine.execute_intent("paste here")
+        assert res is not None
+        assert res["action"] == "paste"
+
+    with patch.object(engine, "new_tab_or_file", return_value="Triggered hotkey: CTRL + T"):
+        res = engine.execute_intent("new tab")
+        assert res is not None
+        assert res["action"] == "new_tab"
+
+    with patch.object(engine, "open_start_menu", return_value="Pressed key 'win'"):
+        res = engine.execute_intent("start menu")
+        assert res is not None
+        assert res["action"] == "start_menu"
+
+    with patch.object(engine, "open_url", return_value="Navigated to YouTube"):
+        res = engine.execute_intent("play jazz on youtube")
+        assert res is not None
+        assert res["action"] == "play_youtube"
