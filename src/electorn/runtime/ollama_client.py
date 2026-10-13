@@ -93,7 +93,10 @@ class OllamaClient:
         """Silently auto-launch Ollama daemon and verify install/models if unreachable."""
         if not self.is_available():
             try:
-                from providers.ollama_manager import OllamaManager
+                try:
+                    from electorn.providers.ollama_manager import OllamaManager
+                except ImportError:
+                    from providers.ollama_manager import OllamaManager
                 mgr = OllamaManager(base_url=self.base_url)
                 mgr.ensure_ready()
             except Exception:

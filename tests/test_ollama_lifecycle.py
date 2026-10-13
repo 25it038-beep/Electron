@@ -1,8 +1,12 @@
 """Integration tests for OllamaManager and auto-start lifecycle."""
 
 import pytest
-from providers.ollama_manager import OllamaManager
-from providers.local_llm import OllamaLocalProvider
+try:
+    from electorn.providers.ollama_manager import OllamaManager
+    from electorn.providers.local_llm import OllamaLocalProvider
+except ImportError:
+    from providers.ollama_manager import OllamaManager
+    from providers.local_llm import OllamaLocalProvider
 
 
 def test_ollama_manager_discovery():

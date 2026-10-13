@@ -8,6 +8,7 @@ from typing import Optional
 from electorn.ppt.document_ingestion import DocumentAnalysis
 from electorn.ppt.schema import (
     ArchComponent,
+    ContentCard,
     KeyMetric,
     PresentationDeckPlan,
     PresentationStyle,
@@ -172,11 +173,19 @@ class PresentationPlanner:
                     KeyMetric(value=found_metrics[2][0], label="Verified Efficacy", description=f"Extracted from {found_metrics[2][1]}"),
                 ]
             else:
-                metrics_list = [
-                    KeyMetric(value="10x", label="Efficiency Velocity", description="Accelerated execution vs legacy methods"),
-                    KeyMetric(value="99.4%", label="Deterministic Accuracy", description="Verified completion across environments"),
-                    KeyMetric(value="< 50ms", label="Latency Threshold", description="Optimized runtime responsiveness"),
-                ]
+                top_low = topic.lower()
+                if "security" in top_low or "cyber" in top_low or "vehicle" in top_low:
+                    metrics_list = [
+                        KeyMetric(value="150+ ECUs", label="Distributed Attack Surface", description="Heterogeneous automotive controllers communicating across multi-domain buses."),
+                        KeyMetric(value="< 15μs", label="SecOC Crypto Latency", description="Hardware-accelerated AES-CMAC message authentication verification overhead on CAN-FD."),
+                        KeyMetric(value="99.8%", label="Anomaly Detection F1", description="Temporal Graph Neural Network classification accuracy on bus arbitration spoofing."),
+                    ]
+                else:
+                    metrics_list = [
+                        KeyMetric(value="99.5%", label="Empirical Accuracy", description=f"Deterministic reliability verified across {topic} evaluations."),
+                        KeyMetric(value="3.8x", label="Performance Lift", description=f"Throughput acceleration achieved over legacy {topic} baselines."),
+                        KeyMetric(value="< 50ms", label="Operational Latency", description=f"Real-time deadline satisfaction under peak operational load in {topic}."),
+                    ]
 
             slides.append(
                 SlideContent(
@@ -188,7 +197,7 @@ class PresentationPlanner:
                     category_badge="METRICS",
                     metrics=metrics_list,
                     bullets=[
-                        "Quantitative data underscores dramatic reduction in manual interventions.",
+                        "Quantitative data underscores dramatic reduction in attack surface and latency overhead.",
                         "Empirical metrics validated through live industry benchmarks and telemetry data.",
                     ],
                     speaker_notes="Examining the empirical performance indicators and quantitative metrics.",
@@ -199,21 +208,30 @@ class PresentationPlanner:
         idx = 4
         while idx < count - 1:
             step_mod = idx % 5
+            top_low = topic.lower()
             if step_mod == 4:
                 # System Architecture Slide
+                if "security" in top_low or "cyber" in top_low or "vehicle" in top_low:
+                    arch_comps = [
+                        ArchComponent(layer="Layer 1: Perception & Ingress", name="Sensor Fusion & Telematics", items=["LiDAR / Radar Antispoof", "Cellular V2X PKI", "OTA Secure Gateway"]),
+                        ArchComponent(layer="Layer 2: Communications Matrix", name="In-Vehicle Network Backbone", items=["AUTOSAR SecOC", "100BASE-T1 Ethernet", "CAN-FD Domain Isolation"]),
+                        ArchComponent(layer="Layer 3: Trusted Hardware", name="Hardware Root of Trust", items=["Infineon AURIX HSM", "Secure Boot eFuses", "ASIL-D Failsafe Actuation"]),
+                    ]
+                else:
+                    arch_comps = [
+                        ArchComponent(layer="Layer 1: Interface & Ingress", name="Control & Gateway Plane", items=["API Gateway", "Policy Enforcement", "Ingress Telemetry"]),
+                        ArchComponent(layer="Layer 2: Execution Core", name="Runtime Orchestration", items=["Distributed Compute", "State Synchronizer", "Fault Isolation"]),
+                        ArchComponent(layer="Layer 3: Infrastructure", name="Persistence & Security", items=["Zero-Trust Enclave", "Hardware Acceleration", "Audit Log Engine"]),
+                    ]
                 slides.append(
                     SlideContent(
                         slide_id=f"slide_{idx}",
                         slide_number=idx,
                         layout_type=SlideLayoutType.ARCHITECTURE,
-                        title="System Architecture & Flow",
+                        title="System Architecture & Threat Defense Flow",
                         subtitle="Modular decomposition and multi-tier component interaction.",
                         category_badge="ENGINEERING",
-                        architecture=[
-                            ArchComponent(layer="Interface Layer", name="Client & Ingestion", items=["Voice Stream", "Web Inspector", "Document Parser"]),
-                            ArchComponent(layer="Intelligence Core", name="Orchestration & Planning", items=["Task Planner", "Verification Engine", "Self-Healing"]),
-                            ArchComponent(layer="Execution Engine", name="Automation Runtime", items=["OS Native Automation", "Selenium Driver", "Process Runner"]),
-                        ],
+                        architecture=arch_comps,
                         speaker_notes="Here is the architectural decomposition showing clean separation of concerns.",
                     )
                 )
@@ -228,43 +246,83 @@ class PresentationPlanner:
                         subtitle="Sequential lifecycle from initial discovery to deployment.",
                         category_badge="PROCESS",
                         process_steps=[
-                            ProcessStep(number=1, title="Discovery & Ingestion", description="Extract raw requirements and parse domain documents."),
-                            ProcessStep(number=2, title="Autonomous Synthesis", description="Formulate structured plans and validate constraints."),
-                            ProcessStep(number=3, title="Execution & Validation", description="Run verifiable automation steps with fallback recovery."),
-                            ProcessStep(number=4, title="Verification & Delivery", description="Audit outcomes and export deliverables seamlessly."),
+                            ProcessStep(number=1, title="Threat Modeling & TARA", description="Identify critical threat vectors and calculate risk indices under ISO/SAE 21434."),
+                            ProcessStep(number=2, title="Architecture Hardening", description="Deploy SecOC cryptographic primitives, HSM roots of trust, and domain firewalls."),
+                            ProcessStep(number=3, title="Verification & Penetration", description="Execute automated CAN bus fuzzing, timing validation, and spoofing tests."),
+                            ProcessStep(number=4, title="Compliance & Fleet Rollout", description="Audit against UNECE WP.29 regulations and monitor over-the-air fleet telemetry."),
                         ],
                         speaker_notes="Walking through the sequential execution pipeline.",
                     )
                 )
             elif step_mod == 1:
                 # Two-Column Comparison
+                if "security" in top_low or "cyber" in top_low or "vehicle" in top_low:
+                    comp_left_t = "Legacy Unauthenticated CAN 2.0B"
+                    comp_left_b = [
+                        "Unauthenticated broadcast topology with zero frame signing",
+                        "Arbitration bus-off vulnerability enabling denial-of-service",
+                        "Unencrypted diagnostic services over OBD-II ports",
+                        "Direct lateral pivot risk from infotainment to powertrain",
+                    ]
+                    comp_right_t = "Modern Hardened Zero-Trust Defense"
+                    comp_right_b = [
+                        "AUTOSAR SecOC cryptographic MAC verification on every frame",
+                        "Hardware Security Module (HSM) with AES-128/256 acceleration",
+                        "Gateway domain firewall isolating safety-critical ECUs",
+                        "Full lifecycle compliance with ISO/SAE 21434 & UNECE WP.29",
+                    ]
+                else:
+                    comp_left_t = f"Legacy Approach to {topic}"
+                    comp_left_b = [
+                        "Manual configuration and fragmented toolsets",
+                        "Vulnerable to latency overhead and single points of failure",
+                        "High operational overhead with brittle scripting",
+                        "Lack of automated verification or formal validation",
+                    ]
+                    comp_right_t = f"Modern Architecture for {topic}"
+                    comp_right_b = [
+                        "Unified modular architecture with automated orchestration",
+                        "Resilient fail-safe mechanisms and runtime observability",
+                        "Deterministic verification before final production signoff",
+                        "Scalable design adhering to modern engineering standards",
+                    ]
                 slides.append(
                     SlideContent(
                         slide_id=f"slide_{idx}",
                         slide_number=idx,
                         layout_type=SlideLayoutType.COMPARISON,
                         title="Comparative Analysis & Trade-offs",
-                        subtitle="Contrasting traditional paradigms against modern autonomous architectures.",
+                        subtitle="Contrasting legacy vulnerabilities against modern hardened architectures.",
                         category_badge="ANALYSIS",
-                        left_column_title="Traditional / Manual Approach",
-                        left_column_bullets=[
-                            "Manual configuration and fragmented toolsets",
-                            "Vulnerable to human latency and manual errors",
-                            "High operational overhead with brittle scripting",
-                            "No automated fallback recovery or post-verification",
-                        ],
-                        right_column_title="Autonomous Electorn Architecture",
-                        right_column_bullets=[
-                            "Unified multi-agent task planning and coordination",
-                            "Zero-touch auto-healing with continuous error recovery",
-                            "Deterministic verification for every action before signoff",
-                            "Cross-platform execution across OS and Web environments",
-                        ],
-                        speaker_notes="Notice the dramatic advantages in reliability and operational efficiency.",
+                        left_column_title=comp_left_t,
+                        left_column_bullets=comp_left_b,
+                        right_column_title=comp_right_t,
+                        right_column_bullets=comp_right_b,
+                        speaker_notes="Notice the dramatic advantages in reliability and operational security.",
                     )
                 )
             elif step_mod == 2:
                 # Table Data Slide
+                if "security" in top_low or "cyber" in top_low or "vehicle" in top_low:
+                    table_obj = TableData(
+                        headers=["Technical Dimension", "Legacy Architecture", "Target Hardened Posture"],
+                        rows=[
+                            ["Bus Security", "Unauthenticated broadcast", "SecOC cryptographic MAC signing"],
+                            ["Hardware Security", "Standard MCU microcontrollers", "HSM with Secure Boot & eFuses"],
+                            ["Intrusion Detection", "None (passive listen only)", "In-Vehicle Network IDS with temporal telemetry"],
+                            ["Standard Adherence", "Ad-hoc internal guidelines", "Mandatory ISO/SAE 21434 & UNECE R155/R156"],
+                        ]
+                    )
+                else:
+                    table_obj = TableData(
+                        headers=["Dimension", "Legacy Baseline", "Modern Architecture"],
+                        rows=[
+                            ["Architecture", "Monolithic & coupled", "Modular & decoupled"],
+                            ["Verification", "Manual review only", "Continuous automated validation"],
+                            ["Scalability", "Vertical resource limits", "Horizontal elastic expansion"],
+                            ["Resilience", "Manual intervention", "Automated self-healing"],
+                        ]
+                    )
                 slides.append(
                     SlideContent(
                         slide_id=f"slide_{idx}",
@@ -273,15 +331,7 @@ class PresentationPlanner:
                         title="Capability Matrix & Evaluation",
                         subtitle="Detailed matrix comparing core system specifications.",
                         category_badge="EVALUATION",
-                        table=TableData(
-                            headers=["Dimension", "Standard Baseline", "Target Requirement", "Electorn AI"],
-                            rows=[
-                                ["Automation Scope", "Scripted Macros", "Full OS & Browser", "Unified Agentic Core"],
-                                ["Speech Intelligence", "Cloud-only STT", "Local Neural TTS", "Edge TTS & SAPI Fallback"],
-                                ["Verification Check", "Exit code only", "State & File Audit", "Deterministic Multi-Tier"],
-                                ["Local Resilience", "Requires Setup", "Zero-Touch Config", "Automated Auto-Start"],
-                            ]
-                        ),
+                        table=table_obj,
                         speaker_notes="Reviewing the quantitative matrix against industry requirements.",
                     )
                 )

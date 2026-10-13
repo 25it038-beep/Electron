@@ -62,6 +62,14 @@ class TableData(BaseModel):
     rows: List[List[str]]
 
 
+class ContentCard(BaseModel):
+    tag: Optional[str] = None
+    title: str
+    body: str
+    highlight: Optional[str] = None
+    bullet_points: List[str] = Field(default_factory=list)
+
+
 class SlideContent(BaseModel):
     slide_id: str = Field(default="")
     slide_number: int
@@ -71,6 +79,11 @@ class SlideContent(BaseModel):
     category_badge: Optional[str] = None
     bullets: List[str] = Field(default_factory=list)
     paragraphs: List[str] = Field(default_factory=list)
+    
+    # Modern Gamma-style Cards and Callouts
+    cards: List[ContentCard] = Field(default_factory=list)
+    callout: Optional[str] = None
+    callout_label: Optional[str] = None
     
     # Structural visual content
     left_column_title: Optional[str] = None

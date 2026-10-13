@@ -51,13 +51,15 @@ class NvidiaCloudClient:
         base_url: Optional[str] = None,
         timeout: Optional[float] = None,
     ) -> None:
-        self.api_key = (
-            api_key
-            or os.environ.get("NVIDIA_API_KEY")
-            or os.environ.get("ELECTORN_NVIDIA_API_KEY")
-        )
-        if not self.api_key:
-            self.api_key = self._discover_api_key()
+        if api_key is not None:
+            self.api_key = api_key
+        else:
+            self.api_key = (
+                os.environ.get("NVIDIA_API_KEY")
+                or os.environ.get("ELECTORN_NVIDIA_API_KEY")
+            )
+            if not self.api_key:
+                self.api_key = self._discover_api_key()
 
         self.base_url = (base_url or os.environ.get("NVIDIA_BASE_URL") or self.DEFAULT_BASE_URL).rstrip("/")
         self.timeout = timeout or self.DEFAULT_TIMEOUT

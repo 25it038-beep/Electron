@@ -201,7 +201,17 @@ def run_development_pipeline(
         mock_mode=mock,
     )
 
-    # Pre-flight check
+    # Pre-flight check & auto-launch
+    if not mock and not client.is_available():
+        with console.status("[bold cyan]Ollama is offline. Starting Ollama daemon automatically...[/bold cyan]", spinner="dots"):
+            try:
+                from electorn.providers.ollama_manager import OllamaManager
+            except ImportError:
+                from providers.ollama_manager import OllamaManager
+            mgr = OllamaManager(base_url=client.base_url)
+            mgr.ensure_ready()
+            time.sleep(1.0)
+
     if not mock and not client.is_available():
         console.print(
             Panel(
@@ -1099,7 +1109,10 @@ def chat_command(
 
     if not client.is_available():
         with console.status("[bold cyan]Ollama is offline. Starting Ollama daemon automatically...[/bold cyan]", spinner="dots"):
-            from providers.ollama_manager import OllamaManager
+            try:
+                from electorn.providers.ollama_manager import OllamaManager
+            except ImportError:
+                from providers.ollama_manager import OllamaManager
             mgr = OllamaManager(base_url=client.base_url)
             mgr.ensure_ready()
             time.sleep(1.0)
@@ -1426,7 +1439,10 @@ def voice_command(
 
     if not client.is_available():
         with console.status("[bold cyan]Ollama is offline. Starting Ollama daemon automatically...[/bold cyan]", spinner="dots"):
-            from providers.ollama_manager import OllamaManager
+            try:
+                from electorn.providers.ollama_manager import OllamaManager
+            except ImportError:
+                from providers.ollama_manager import OllamaManager
             mgr = OllamaManager(base_url=client.base_url)
             mgr.ensure_ready()
             time.sleep(1.0)
