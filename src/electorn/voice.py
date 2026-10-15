@@ -28,12 +28,27 @@ except Exception:
 
 
 class VoiceEngine:
-    """Provides bidirectional voice interaction for Electorn AI using recent neural voice models."""
+    """Provides bidirectional voice interaction for Electorn AI using recent neural voice models (English & Tamil)."""
+
+    SUPPORTED_LANGUAGES = {
+        "en": "en-US",
+        "en-us": "en-US",
+        "english": "en-US",
+        "ta": "ta-IN",
+        "ta-in": "ta-IN",
+        "tamil": "ta-IN",
+    }
 
     # Recent neural models (Edge TTS)
     NEURAL_MODELS = {
-        "female": "en-US-AvaNeural",      # High-fidelity natural female neural voice
-        "male": "en-US-AndrewNeural",     # High-fidelity natural male neural voice
+        "en-US": {
+            "female": "en-US-AvaNeural",      # High-fidelity natural female English neural voice
+            "male": "en-US-AndrewNeural",     # High-fidelity natural male English neural voice
+        },
+        "ta-IN": {
+            "female": "ta-IN-PallaviNeural",  # High-fidelity natural female Tamil neural voice
+            "male": "ta-IN-ValluvarNeural",   # High-fidelity natural male Tamil neural voice
+        },
     }
 
     def __init__(
@@ -41,13 +56,34 @@ class VoiceEngine:
         sample_rate: int = 16000,
         speech_speed: int = 1,
         voice_gender: str = "female",
+        language: str = "en-US",
     ):
         self.sample_rate = sample_rate
         self.speech_speed = speech_speed
         self.voice_gender = voice_gender.lower()
+        self.language = self._normalize_language(language)
         self.recognizer = sr.Recognizer() if VOICE_DEPS_AVAILABLE else None
         self._tts_lock = threading.Lock()
         self._is_speaking = False
+
+    @classmethod
+    def _normalize_language(cls, lang: str) -> str:
+        """Normalize language code to standard locale (e.g. 'ta' -> 'ta-IN', 'en' -> 'en-US')."""
+        if not lang:
+            return "en-US"
+        key = lang.strip().lower()
+        return cls.SUPPORTED_LANGUAGES.get(key, lang)
+
+    @staticmethod
+    def is_tamil_text(text: str) -> bool:
+        """Check if text contains Tamil Unicode characters (U+0B80 to U+0BFF)."""
+        import re
+        return bool(re.search(r"[\u0B80-\u0BFF]", text))
+
+    def set_language(self, language: str) -> str:
+        """Change the active speech and synthesis language (e.g. 'ta-IN' or 'en-US')."""
+        self.language = self._normalize_language(language)
+        return self.language
 
     def is_supported(self) -> bool:
         """Check if microphone capture and speech recognition are available."""
@@ -62,15 +98,23 @@ class VoiceEngine:
         if gender.lower() in ("female", "male"):
             self.voice_gender = gender.lower()
 
-    def get_active_model_name(self) -> str:
-        """Return the name of the active voice model."""
+    def get_active_model_name(self, for_text: Optional[str] = None) -> str:
+        """Return the name of the active voice model based on language and text."""
+        target_lang = self.language
+        if for_text and self.is_tamil_text(for_text):
+            target_lang = "ta-IN"
+
         if NEURAL_VOICE_AVAILABLE:
-            return self.NEURAL_MODELS.get(self.voice_gender, "en-US-AvaNeural")
+            lang_dict = self.NEURAL_MODELS.get(target_lang, self.NEURAL_MODELS["en-US"])
+            return lang_dict.get(self.voice_gender, "en-US-AvaNeural")
+
         if sys.platform == "win32":
+            if target_lang == "ta-IN":
+                return "Microsoft Valluvar (Tamil)" if self.voice_gender == "male" else "Microsoft Pallavi (Tamil)"
             return "Microsoft Zira (SAPI)" if self.voice_gender == "female" else "Microsoft David (SAPI)"
         return "System TTS"
 
-    def speak(self, text: str, async_mode: bool = False) -> None:
+    def speak(self, text: str, async_mode: bool = False, language_override: Optional[str] = None) -> None:
         """Speak out text response via modern neural voice or native SAPI/OS fallback."""
         if not text or not text.strip():
             return
@@ -80,6 +124,14 @@ class VoiceEngine:
         if not clean_text:
             return
 
+        # Determine target language: override > auto-detect Tamil in text > configured language
+        if language_override:
+            target_lang = self._normalize_language(language_override)
+        elif self.is_tamil_text(clean_text):
+            target_lang = "ta-IN"
+        else:
+            target_lang = self.language
+
         def _tts_worker() -> None:
             with self._tts_lock:
                 self._is_speaking = True
@@ -88,7 +140,8 @@ class VoiceEngine:
                 # 1. Try Recent Neural Voice Model (Edge TTS)
                 if NEURAL_VOICE_AVAILABLE:
                     try:
-                        voice_model = self.NEURAL_MODELS.get(self.voice_gender, "en-US-AvaNeural")
+                        lang_models = self.NEURAL_MODELS.get(target_lang, self.NEURAL_MODELS["en-US"])
+                        voice_model = lang_models.get(self.voice_gender, "en-US-AvaNeural")
                         # Run edge-tts stream asynchronously
                         audio_buffer = io.BytesIO()
 
@@ -127,7 +180,7 @@ class VoiceEngine:
                         speaker = win32com.client.Dispatch("SAPI.SpVoice")
                         speaker.Rate = self.speech_speed
 
-                        # Configure voice based on preferred gender
+                        # Configure voice based on preferred gender and language
                         try:
                             voices = speaker.GetVoices()
                             selected_voice = None
@@ -138,6 +191,11 @@ class VoiceEngine:
                                     g = v.GetAttribute("Gender").lower()
                                 except Exception:
                                     g = ""
+
+                                if target_lang == "ta-IN":
+                                    if "tamil" in desc or "valluvar" in desc or "pallavi" in desc:
+                                        selected_voice = v
+                                        break
 
                                 if self.voice_gender == "female":
                                     if g == "female" or any(n in desc for n in ["zira", "female", "hazel", "eva", "susan", "helen"]):
@@ -188,15 +246,19 @@ class VoiceEngine:
         self,
         record_seconds: float = 5.0,
         status_cb: Optional[Callable[[str], None]] = None,
+        language_override: Optional[str] = None,
     ) -> Optional[str]:
-        """Capture microphone audio and transcribe into text via SpeechRecognition."""
+        """Capture microphone audio and transcribe into text via SpeechRecognition (supports Tamil and English)."""
         if not VOICE_DEPS_AVAILABLE:
             raise RuntimeError("Voice dependencies (sounddevice, speech_recognition, numpy) not installed.")
 
         if status_cb:
-            status_cb("🎙️ Listening... (Speak now)")
+            lang_label = "தமிழ் (Tamil)" if (language_override or self.language) == "ta-IN" else "English"
+            status_cb(f"🎙️ Listening in {lang_label}... (Speak now)")
 
         try:
+            target_lang = self._normalize_language(language_override) if language_override else self.language
+
             # Record audio from default microphone using sounddevice
             recording = sd.rec(
                 int(record_seconds * self.sample_rate),
@@ -227,7 +289,18 @@ class VoiceEngine:
             # Transcribe via SpeechRecognition Google speech engine
             with sr.AudioFile(wav_buffer) as source:
                 audio = self.recognizer.record(source)
-                text = self.recognizer.recognize_google(audio)
+                try:
+                    text = self.recognizer.recognize_google(audio, language=target_lang)
+                except sr.UnknownValueError:
+                    # Bilingual fallback: if primary is Tamil and didn't match, attempt English recognition
+                    if target_lang == "ta-IN":
+                        try:
+                            text = self.recognizer.recognize_google(audio, language="en-US")
+                        except Exception:
+                            return None
+                    else:
+                        return None
+
                 return text.strip() if text else None
 
         except sr.UnknownValueError:
@@ -241,9 +314,9 @@ class VoiceEngine:
                 status_cb(f"Mic capture error: {err}")
             return None
 
-    @staticmethod
-    def _sanitize_text_for_speech(text: str) -> str:
-        """Remove long code blocks and special markup so speech sounds conversational."""
+    @classmethod
+    def _sanitize_text_for_speech(cls, text: str) -> str:
+        """Remove long code blocks and special markup so speech sounds conversational in English or Tamil."""
         import re
         # Remove URLs
         cleaned = re.sub(r"https?://\S+", "link on screen", text)
@@ -252,7 +325,75 @@ class VoiceEngine:
         # Remove markdown symbols
         cleaned = re.sub(r"[*_#`>]", "", cleaned)
         # Limit spoken length if response is an essay
-        sentences = [s.strip() for s in cleaned.split(".") if s.strip()]
+        sentences = [s.strip() for s in re.split(r"[.!?।]+", cleaned) if s.strip()]
         if len(sentences) > 4:
-            cleaned = ". ".join(sentences[:4]) + ". The full details are displayed on your screen."
+            if cls.is_tamil_text(cleaned):
+                cleaned = ". ".join(sentences[:4]) + ". கூடுதல் தகவல்கள் உங்கள் திரையில் காட்டப்பட்டுள்ளன."
+            else:
+                cleaned = ". ".join(sentences[:4]) + ". The full details are displayed on your screen."
         return cleaned.strip()
+
+
+def detect_web_search_intent(text: str) -> tuple[bool, str]:
+    """Detect if a spoken voice query is requesting a live web search (English or Tamil).
+
+    Returns (is_search, clean_search_query).
+    """
+    import re
+    raw = text.strip()
+    if not raw:
+        return False, ""
+    lower = raw.lower()
+
+    # 1. Tamil search patterns
+    # இணையத்தில்/கூகுளில்/வலையில் தேடு <topic>
+    m = re.match(r"^(?:இணையத்தில்|கூகுளில்|வலையில்)\s+(?:தேடு|தேடுக)\s+(.+)$", raw)
+    if m:
+        return True, m.group(1).strip()
+
+    # <topic> பற்றி (இணையத்தில்)? தேடு
+    m = re.match(r"^(.+?)\s+பற்றி(?:\s+இணையத்தில்|\s+கூகுளில்)?\s+(?:தேடு|தேடுக)$", raw)
+    if m:
+        return True, m.group(1).strip()
+
+    # தேடு <topic>
+    m = re.match(r"^(?:தேடு|தேடுக)\s+(.+)$", raw)
+    if m:
+        return True, m.group(1).strip()
+
+    # வலைத் தேடல் / வலை தேடல் <topic>
+    m = re.match(r"^(?:வலைத்\s*தேடல்|வலை\s*தேடல்)\s+(.+)$", raw)
+    if m:
+        return True, m.group(1).strip()
+
+    # இன்றைய செய்தி / வானிலை / நிலவரம்
+    if any(k in raw for k in ["இன்றைய செய்தி", "இன்றைய வானிலை", "நடப்பு நிகழ்வுகள்", "தற்போதைய நிலவரம்"]):
+        return True, raw
+
+    # 2. English search patterns
+    # Explicit search prefixes: "search web for X", "web search X", "search for X", "google X"
+    prefixes = [
+        r"^(?:search\s+(?:the\s+)?web\s+for|search\s+for|web\s+search(?:\s+for)?|search\s+google\s+for|google|search\s+online\s+for|look\s+up|search\s+internet\s+for)\s+(.+?)(?:\s+(?:on\s+the\s+web|online|on\s+google|on\s+internet))?$",
+        r"^(?:find|browse\s+for)\s+(.+?)\s+(?:online|on\s+the\s+web|on\s+google)$",
+    ]
+    for p in prefixes:
+        m = re.match(p, lower)
+        if m:
+            start, end = m.span(1)
+            q = raw[start:end].strip()
+            if q:
+                return True, q
+
+    # Informational questions about latest / real-time events
+    info_patterns = [
+        r"^(?:what(?:'s|\s+is)\s+the\s+latest\s+(?:news|update|score|status|price|version)\s+(?:about|on|of)?)\s+(.+)$",
+        r"^(?:current\s+(?:weather|temperature|stock\s+price|news)\s+(?:in|for|of)?)\s+(.+)$",
+        r"^(?:who\s+won\s+the)\s+(.+)$",
+    ]
+    for p in info_patterns:
+        m = re.match(p, lower)
+        if m:
+            return True, raw
+
+    return False, ""
+

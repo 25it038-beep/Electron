@@ -32,7 +32,7 @@ from electorn.verification.quality_report import ExecutedCheck, QualityReport
 from electorn.workspace.checkpoints import CheckpointManager
 from electorn.workspace.file_manager import FileOperationResult
 from electorn.workspace.project_state import ProjectState
-from electorn.voice import VoiceEngine
+from electorn.voice import VoiceEngine, detect_web_search_intent
 from electorn.automation import AutomationEngine
 
 
@@ -112,7 +112,7 @@ def default_callback(ctx: typer.Context) -> None:
         console.print("[bold cyan]Choose your development mode:[/bold cyan]\n")
         console.print("  [bold green]1.[/bold green] 🚀 [bold white]Autonomous App Creator[/bold white] — Build a full application, generate files, run tests & self-repair")
         console.print("  [bold magenta]2.[/bold magenta] 💬 [bold white]Futuristic AI Chat Studio[/bold white] — Interactive multi-agent terminal with code streaming, memory & file inspector")
-        console.print("  [bold cyan]3.[/bold cyan] 🎙️ [bold white]Hands-Free Voice Assistant[/bold white] — Speak with your mic & hear responses spoken aloud")
+        console.print("  [bold cyan]3.[/bold cyan] 🎙️ [bold white]Hands-Free Voice Assistant[/bold white] — Speak with your mic & hear responses spoken aloud [bold magenta](English & Tamil • Live Web Searches)[/bold magenta]")
         console.print("  [bold yellow]4.[/bold yellow] 🩺 [bold white]System Doctor[/bold white] — Audit developer runtimes, Ollama engine & models")
         console.print("  [bold blue]5.[/bold blue] 🌐 [bold white]HS AI Solutions Studio[/bold white] — Explore the product suite (Pendulum, Lumina, Ledger, HS CODE)")
         console.print("  [bold magenta]6.[/bold magenta] 📬 [bold white]Personal Communication Assistant[/bold white] — Email, WhatsApp, Files, Calls & Tasks")
@@ -1414,7 +1414,7 @@ def chat_command(
 
 
 
-@app.command(name="voice", help="Launch interactive hands-free voice mode with Electorn AI.")
+@app.command(name="voice", help="Launch interactive hands-free voice mode with Electorn AI (English & Tamil with Live Web Searches).")
 def voice_command(
     workspace: Path = typer.Option(
         Path("."),
@@ -1428,12 +1428,36 @@ def voice_command(
         "-m",
         help="Target Ollama model name",
     ),
+    language: str = typer.Option(
+        "en-US",
+        "--language",
+        "--lang",
+        "-l",
+        help="Voice language: 'ta' or 'ta-IN' for Tamil (தமிழ்), 'en' for English",
+    ),
+    tamil: bool = typer.Option(
+        False,
+        "--tamil",
+        help="Quick switch to Tamil voice assistant (ta-IN)",
+    ),
+    web_search: bool = typer.Option(
+        True,
+        "--web-search / --no-web-search",
+        "--web",
+        help="Enable live web searches during voice conversation",
+    ),
 ) -> None:
-    """Hands-free voice assistant: listens to your microphone and speaks responses aloud."""
+    """Hands-free voice assistant: listens to your microphone, searches the web, and speaks responses aloud (English & Tamil)."""
     if hasattr(workspace, "default"):
         workspace = getattr(workspace, "default", Path("."))
     if hasattr(model, "default"):
         model = getattr(model, "default", None)
+    if hasattr(language, "default"):
+        language = getattr(language, "default", "en-US")
+    if hasattr(tamil, "default"):
+        tamil = getattr(tamil, "default", False)
+    if hasattr(web_search, "default"):
+        web_search = getattr(web_search, "default", True)
     if not isinstance(workspace, Path):
         workspace = Path(str(workspace) if workspace else ".")
 
@@ -1459,13 +1483,15 @@ def voice_command(
         console.print(f"[bold red]❌ Cannot connect to Ollama at {client.base_url}[/bold red]")
         sys.exit(1)
 
-    voice = VoiceEngine()
+    target_lang = "ta-IN" if (tamil or language.lower() in ("ta", "tamil", "ta-in", "ta_in")) else language
+    voice = VoiceEngine(language=target_lang)
     if not voice.is_supported():
         console.print("[bold red]❌ Voice engine dependencies not available.[/bold red]")
         console.print("Please ensure [green]sounddevice[/green], [green]speech_recognition[/green], and [green]numpy[/green] are installed.")
         return
 
     automation = AutomationEngine()
+    search_engine = WebSearchEngine(timeout=6.0) if web_search else None
 
     team = MultiAgentTeam(
         workspace_dir=workspace,
@@ -1476,15 +1502,20 @@ def voice_command(
     profile = team.model_profile
     current_agent = team.architect
     active_voice_model = voice.get_active_model_name()
+    lang_display = "தமிழ் / Tamil (ta-IN)" if voice.language == "ta-IN" else "English (en-US)"
+    web_status = "Active (DuckDuckGo, Wikipedia & Instant Answers)" if web_search else "Disabled"
 
     voice_banner = (
         f"🎙️  [bold cyan]ELECTORN AI — CONTINUOUS AUTONOMOUS VOICE ASSISTANT[/bold cyan]\n"
         f"Active Neural Engine: [bold green]{profile.name}[/bold green] ({profile.description})\n"
         f"Active Persona: 🧠 [bold yellow]{current_agent.name}[/bold yellow] ({current_agent.role})\n"
-        f"Recent Voice Model: [bold magenta]{active_voice_model}[/bold magenta] (Natural Female Neural Voice)\n"
+        f"Primary Language: [bold cyan]{lang_display}[/bold cyan] • Model: [bold magenta]{active_voice_model}[/bold magenta]\n"
+        f"Live Web Searches: [bold green]{web_status}[/bold green]\n"
         f"Mode: [bold green]100% Hands-Free Accessibility & OS Automation Active[/bold green]\n"
         f"Automation: [bold cyan]Mouse Click/Move • Typing • Apps • Web Browser • Media • Windows Control[/bold cyan]\n\n"
         f"[dim]Speak any command hands-free:\n"
+        f"  • Language: 'switch to tamil' (தமிழுக்கு மாறு) or 'switch to english'\n"
+        f"  • Web Search: 'search web for <topic>', 'what is latest news on <topic>', 'இணையத்தில் தேடு <தலைப்பு>'\n"
         f"  • Mouse: 'click', 'double click', 'right click', 'move cursor center/up/down/left/right'\n"
         f"  • Keyboard: 'type <text>', 'press enter', 'select all', 'copy', 'paste', 'undo', 'save'\n"
         f"  • Apps: 'open notepad', 'open chrome', 'open calc', 'open terminal', 'start menu', 'close notepad'\n"
@@ -1498,7 +1529,11 @@ def voice_command(
     conversation_history: list[dict[str, str]] = []
 
     # Spoken greeting
-    voice.speak("Continuous voice automation activated. I am listening for your commands.", async_mode=True)
+    if voice.language == "ta-IN":
+        greeting = "வணக்கம்! எலெக்ட்ரான் ஏஐ தமிழ் குரல் உதவியாளர் மற்றும் நேரடி இணைய தேடல் தயாராக உள்ளது. சொல்லுங்கள், நான் கேட்கிறேன்."
+    else:
+        greeting = "Continuous voice automation and live web searches activated. I am listening for your commands."
+    voice.speak(greeting, async_mode=True)
     console.print("[dim cyan]🎙️ Continuous listening active. Speak your commands anytime hands-free...[/dim cyan]\n")
 
     while True:
@@ -1528,11 +1563,101 @@ def voice_command(
             console.print(f"\n[bold cyan]You (Voice)[/bold cyan] ❯ [white]{query}[/white]")
 
             # Exit command check
-            if any(term in query.lower() for term in ["exit", "quit", "stop listening", "stop voice", "goodbye", "bye bye"]):
+            if any(term in query.lower() for term in ["exit", "quit", "stop listening", "stop voice", "goodbye", "bye bye", "வெளியேறு", "நிறுத்து"]):
                 automation.close_browser()
-                voice.speak("Continuous voice mode closed. Goodbye!", async_mode=False)
+                farewell = "குரல் பயன்முறை நிறைவடைந்தது. நன்றி, மீண்டும் சந்திப்போம்!" if voice.language == "ta-IN" else "Continuous voice mode closed. Goodbye!"
+                voice.speak(farewell, async_mode=False)
                 console.print("\n[yellow]Continuous voice assistant closed. Until next time! 🚀[/yellow]")
                 break
+
+            lower_q = query.lower()
+
+            # Language Switching via voice
+            if any(phrase in lower_q for phrase in ["switch to tamil", "change to tamil", "tamil voice", "talk in tamil", "speak in tamil", "தமிழுக்கு மாறு", "தமிழில் பேசு", "தமிழ் மொழி"]):
+                voice.set_language("ta-IN")
+                console.print("\n🌐 [bold magenta][LANGUAGE SWITCH][/bold magenta] [cyan]தமிழ் (Tamil - ta-IN) Active • ta-IN-PallaviNeural[/cyan]")
+                spoken = "தமிழ் குரல் பயன்முறை இயக்கப்பட்டது. சொல்லுங்கள், நான் கேட்கிறேன்."
+                voice.speak(spoken, async_mode=False)
+                console.print("[dim cyan]🎙️ Listening for next command...[/dim cyan]")
+                continue
+
+            if any(phrase in lower_q for phrase in ["switch to english", "change to english", "english voice", "talk in english", "speak in english", "ஆங்கிலத்திற்கு மாறு", "ஆங்கிலத்தில் பேசு", "ஆங்கிலம்"]):
+                voice.set_language("en-US")
+                console.print("\n🌐 [bold magenta][LANGUAGE SWITCH][/bold magenta] [cyan]English (en-US) Active • en-US-AvaNeural[/cyan]")
+                spoken = "Switched to English voice mode. I am listening for your commands."
+                voice.speak(spoken, async_mode=False)
+                console.print("[dim cyan]🎙️ Listening for next command...[/dim cyan]")
+                continue
+
+            # Live Web Search Intent Check
+            is_search, search_q = detect_web_search_intent(query) if search_engine else (False, "")
+            if is_search and search_q:
+                console.print(f"🌐 [bold cyan][LIVE WEB SEARCH][/bold cyan] Searching for: [bold white]'{search_q}'[/bold white]...")
+
+                # Open in browser if user asked specifically for browser
+                if any(phrase in lower_q for phrase in ["open in browser", "open google for", "open browser for", "browser search"]):
+                    try:
+                        automation.search_web(search_q, headless=False)
+                    except Exception:
+                        pass
+
+                with console.status("[cyan]Fetching live web search results...[/cyan]", spinner="earth"):
+                    results = search_engine.search(search_q, max_results=3)
+
+                if results:
+                    console.print(search_engine.format_table(search_q, results))
+                    context_str = search_engine.format_context_prompt(search_q, results)
+
+                    is_ta = (voice.language == "ta-IN" or voice.is_tamil_text(query))
+                    if is_ta:
+                        chat_system = (
+                            f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Voice Assistant mode. "
+                            f"You have live, verified web search results below. Answer the user's question accurately, "
+                            f"factually, and concisely in 2-3 sentences in clear, polite, natural Tamil (தமிழ்). "
+                            f"Do not read raw URLs or markup aloud.\n\n{context_str}"
+                        )
+                    else:
+                        chat_system = (
+                            f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Voice Assistant mode. "
+                            f"You have live, verified web search results below. Answer the user's question accurately, "
+                            f"factually, and concisely in 2-3 sentences based on the live web search data. "
+                            f"Do not read raw URLs or markup aloud.\n\n{context_str}"
+                        )
+
+                    streamed_chunks: list[str] = []
+                    console.print(f"\n🧠 [bold yellow]{current_agent.name}[/bold yellow] ❯ ", end="")
+                    try:
+                        with console.status("[cyan]Synthesizing live answer...[/cyan]", spinner="dots"):
+                            token_gen = current_agent.stream_ask(query, conversation_history[-4:] if conversation_history else [], system_override=chat_system)
+                            try:
+                                first_chunk = next(token_gen)
+                            except StopIteration:
+                                first_chunk = ""
+
+                        if first_chunk:
+                            console.print(first_chunk, end="", highlight=False)
+                            streamed_chunks.append(first_chunk)
+
+                        for chunk in token_gen:
+                            console.print(chunk, end="", highlight=False)
+                            streamed_chunks.append(chunk)
+                            if hasattr(sys.stdout, "flush"):
+                                sys.stdout.flush()
+                    except Exception:
+                        resp = current_agent.ask(f"{chat_system}\n\nUser Question: {query}")
+                        console.print(resp.content, end="")
+                        streamed_chunks = [resp.content]
+
+                    full_text = "".join(streamed_chunks).strip()
+                    console.print("\n")
+
+                    if full_text:
+                        conversation_history.append({"role": "user", "content": query})
+                        conversation_history.append({"role": "assistant", "content": full_text})
+                        voice.speak(full_text, async_mode=False)
+
+                    console.print("[dim cyan]🎙️ Listening for next command...[/dim cyan]")
+                    continue
 
             # Autonomous Intent Check: Selenium Browser Automation & OS Control
             auto_res = automation.execute_intent(query)
@@ -1554,12 +1679,20 @@ def voice_command(
             if len(conversation_history) > 8:
                 conversation_history = conversation_history[-8:]
 
-            chat_system = (
-                f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Voice Assistant mode. "
-                f"You are assisting a hands-free user who cannot use their hands or mouse/keyboard physically. "
-                f"Be exceptionally helpful, clear, and proactive. Keep verbal replies concise and direct (2-3 sentences). "
-                f"If the user asks to perform an action on the computer that you can guide or perform, inform them clearly."
-            )
+            is_ta = (voice.language == "ta-IN" or voice.is_tamil_text(query))
+            if is_ta:
+                chat_system = (
+                    f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Voice Assistant mode. "
+                    f"You are assisting a hands-free user who speaks Tamil (தமிழ்). "
+                    f"Be exceptionally helpful, clear, and polite. Respond concisely in 2-3 sentences in natural Tamil (தமிழ்)."
+                )
+            else:
+                chat_system = (
+                    f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Voice Assistant mode. "
+                    f"You are assisting a hands-free user who cannot use their hands or mouse/keyboard physically. "
+                    f"Be exceptionally helpful, clear, and proactive. Keep verbal replies concise and direct (2-3 sentences). "
+                    f"If the user asks to perform an action on the computer that you can guide or perform, inform them clearly."
+                )
 
             streamed_chunks: list[str] = []
             console.print(f"\n🧠 [bold yellow]{current_agent.name}[/bold yellow] ❯ ", end="")

@@ -145,3 +145,132 @@ def test_listen_and_transcribe_success(mock_recognize, mock_wait, mock_rec):
 
     assert result == "build a fastapi app"
     assert any("Transcribing" in s for s in status_updates)
+
+
+def test_voice_tamil_language_support():
+    """Verify Tamil language normalization, text detection, and model retrieval."""
+    engine = VoiceEngine(language="ta")
+    assert engine.language == "ta-IN"
+
+    engine.set_language("tamil")
+    assert engine.language == "ta-IN"
+
+    assert VoiceEngine.is_tamil_text("வணக்கம்") is True
+    assert VoiceEngine.is_tamil_text("Hello world") is False
+
+    model_name = engine.get_active_model_name()
+    assert "Pallavi" in model_name or "Valluvar" in model_name
+
+    engine.set_gender("male")
+    assert "Valluvar" in engine.get_active_model_name()
+
+
+def test_sanitize_text_tamil():
+    """Verify Tamil text sanitization and Tamil detail truncation message."""
+    text = "முதல் வாக்கியம். இரண்டாவது வாக்கியம். மூன்றாவது வாக்கியம். நான்காவது வாக்கியம். ஐந்தாவது வாக்கியம்."
+    clean = VoiceEngine._sanitize_text_for_speech(text)
+    assert "கூடுதல் தகவல்கள் உங்கள் திரையில் காட்டப்பட்டுள்ளன." in clean
+
+
+@patch("electorn.voice.NEURAL_VOICE_AVAILABLE", True)
+@patch("sounddevice.wait")
+@patch("sounddevice.play")
+@patch("soundfile.read")
+@patch("edge_tts.Communicate")
+def test_speak_tamil_neural_voice(mock_comm_cls, mock_sf_read, mock_sd_play, mock_sd_wait):
+    """Verify edge_tts Communicate uses ta-IN-PallaviNeural when speaking Tamil text."""
+    mock_comm = MagicMock()
+    async def _dummy_stream():
+        yield {"type": "audio", "data": b"dummy_audio_bytes"}
+    mock_comm.stream.return_value = _dummy_stream()
+    mock_comm_cls.return_value = mock_comm
+
+    mock_sf_read.return_value = (np.zeros((100,)), 24000)
+
+    engine = VoiceEngine(voice_gender="female", language="en-US")
+    # Even if default language is English, speaking Tamil text should auto-select ta-IN-PallaviNeural
+    engine.speak("வணக்கம் நண்பரே", async_mode=False)
+
+    mock_comm_cls.assert_called_once()
+    args, _ = mock_comm_cls.call_args
+    assert "வணக்கம் நண்பரே" in args[0]
+    assert args[1] == "ta-IN-PallaviNeural"
+    mock_sd_play.assert_called_once()
+
+
+@patch("sounddevice.rec")
+@patch("sounddevice.wait")
+@patch("speech_recognition.Recognizer.recognize_google")
+def test_listen_and_transcribe_tamil_language(mock_recognize, mock_wait, mock_rec):
+    """Verify speech recognizer uses ta-IN language code when configured for Tamil."""
+    signal = np.ones((16000, 1), dtype=np.int16) * 5000
+    mock_rec.return_value = signal
+    mock_recognize.return_value = "வணக்கம்"
+
+    engine = VoiceEngine(language="ta")
+    status_updates = []
+    result = engine.listen_and_transcribe(
+        record_seconds=1.0,
+        status_cb=lambda msg: status_updates.append(msg),
+    )
+
+    assert result == "வணக்கம்"
+    mock_recognize.assert_called_once()
+    _, kwargs = mock_recognize.call_args
+    assert kwargs.get("language") == "ta-IN"
+    assert any("தமிழ்" in s for s in status_updates)
+
+
+def test_detect_web_search_intent_english():
+    """Verify English web search intent detection across patterns."""
+    from electorn.voice import detect_web_search_intent
+
+    is_search, q = detect_web_search_intent("search web for latest AI news")
+    assert is_search is True
+    assert q == "latest AI news"
+
+    is_search, q = detect_web_search_intent("google quantum computing algorithms")
+    assert is_search is True
+    assert q == "quantum computing algorithms"
+
+    is_search, q = detect_web_search_intent("look up Nvidia stock price online")
+    assert is_search is True
+    assert "Nvidia stock price" in q
+
+    is_search, q = detect_web_search_intent("what is the latest news about NASA")
+    assert is_search is True
+    assert "NASA" in q
+
+    # OS automation intents should NOT be flagged as web search
+    is_search, _ = detect_web_search_intent("click")
+    assert is_search is False
+    is_search, _ = detect_web_search_intent("open notepad")
+    assert is_search is False
+    is_search, _ = detect_web_search_intent("type hello world")
+    assert is_search is False
+
+
+def test_detect_web_search_intent_tamil():
+    """Verify Tamil web search intent detection across patterns."""
+    from electorn.voice import detect_web_search_intent
+
+    is_search, q = detect_web_search_intent("இணையத்தில் தேடு செயற்கை நுண்ணறிவு")
+    assert is_search is True
+    assert q == "செயற்கை நுண்ணறிவு"
+
+    is_search, q = detect_web_search_intent("சென்னை வானிலை பற்றி தேடு")
+    assert is_search is True
+    assert q == "சென்னை வானிலை"
+
+    is_search, q = detect_web_search_intent("தேடு தமிழ்நாடு செய்திகள்")
+    assert is_search is True
+    assert q == "தமிழ்நாடு செய்திகள்"
+
+    is_search, q = detect_web_search_intent("இன்றைய செய்தி")
+    assert is_search is True
+
+    # Non-search Tamil query
+    is_search, _ = detect_web_search_intent("வணக்கம் நலமா")
+    assert is_search is False
+
+
