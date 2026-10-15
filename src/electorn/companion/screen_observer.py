@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 import sys
 import time
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 try:
     from PIL import Image, ImageGrab, ImageOps
@@ -31,16 +31,22 @@ if sys.platform == "win32":
 else:
     WIN32_AVAILABLE = False
 
-from electorn.companion.schema import ScreenObservationConfig, ScreenObservationReport
+from electorn.companion.activity_classifier import ActivityClassifier
+from electorn.companion.schema import ActivityCategory, ScreenObservationConfig, ScreenObservationReport
 
 logger = logging.getLogger(__name__)
 
 
 class ScreenObservationEngine:
-    """Observes the user's workspace screen safely with privacy boundaries and change detection."""
+    """Observes the user's workspace screen safely with privacy boundaries, activity classification, and change detection."""
 
-    def __init__(self, config: Optional[ScreenObservationConfig] = None) -> None:
+    def __init__(
+        self,
+        config: Optional[ScreenObservationConfig] = None,
+        classifier: Optional[ActivityClassifier] = None,
+    ) -> None:
         self.config = config or ScreenObservationConfig()
+        self.classifier = classifier or ActivityClassifier()
         self._last_thumbnail: Optional[Any] = None
         self._last_capture_time: float = 0.0
 
@@ -123,10 +129,14 @@ class ScreenObservationEngine:
             return 1.0
 
     def capture_screen(self) -> Tuple[Optional[Any], ScreenObservationReport]:
-        """Safely captures screen image and constructs observation metadata."""
+        """Safely captures screen image and constructs observation metadata with activity classification."""
         window_title, process_name = self.get_active_window_info()
         category = self.categorize_window(window_title, process_name)
         is_priv = self.is_sensitive(window_title, process_name)
+
+        act_category, conf, sustained_duration, is_distracted = self.classifier.record_observation(
+            window_title, process_name
+        )
 
         # Base report
         report = ScreenObservationReport(
@@ -134,6 +144,9 @@ class ScreenObservationEngine:
             window_title=window_title,
             process_name=process_name,
             app_category=category,
+            activity_category=act_category,
+            sustained_duration_seconds=sustained_duration,
+            confidence=conf,
             is_excluded=is_priv,
             change_ratio=0.0,
         )

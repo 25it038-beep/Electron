@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from electorn.companion.activity_classifier import ActivityClassifier
 from electorn.companion.interface import CompanionInterface
 from electorn.companion.memory import MemoryEngine
 from electorn.companion.schema import (
@@ -18,14 +19,34 @@ from electorn.companion.schema import (
     HumorLevel,
     MemoryCategory,
 )
+from electorn.companion.startup import StartupManager
 from electorn.companion.storage import CompanionStorage
 from electorn.companion.supervisor import CompanionSupervisor
+from electorn.companion.time_engine import TimeAwarenessEngine
 
 companion_app = typer.Typer(
     name="companion",
-    help="💖 Electorn Companion Mode — Persistent, Voice-Enabled, Screen-Aware AI Girlfriend (Aria).",
+    help="💖 Electorn Companion Mode — Persistent, Voice-Enabled, Screen-Aware AI Companion (Harshan).",
     invoke_without_command=True,
 )
+screen_subapp = typer.Typer(name="screen", help="Manage screen observation and privacy exclusions.")
+startup_subapp = typer.Typer(name="startup", help="Manage automatic Windows login startup.")
+bedtime_subapp = typer.Typer(name="bedtime", help="Manage bedtime schedules and sleep reminders.")
+quiet_hours_subapp = typer.Typer(name="quiet-hours", help="Manage quiet hours.")
+voice_subapp = typer.Typer(name="voice", help="Voice engine controls and status.")
+proactive_subapp = typer.Typer(name="proactive", help="Proactive speech controls and limits.")
+focus_subapp = typer.Typer(name="focus", help="Focus mode controls.")
+activity_subapp = typer.Typer(name="activity", help="Activity tracking and summaries.")
+
+companion_app.add_typer(screen_subapp)
+companion_app.add_typer(startup_subapp)
+companion_app.add_typer(bedtime_subapp)
+companion_app.add_typer(quiet_hours_subapp)
+companion_app.add_typer(voice_subapp)
+companion_app.add_typer(proactive_subapp)
+companion_app.add_typer(focus_subapp)
+companion_app.add_typer(activity_subapp)
+
 console = Console(legacy_windows=False)
 
 
@@ -36,9 +57,13 @@ def companion_default_callback(ctx: typer.Context) -> None:
         start_cmd()
 
 
+# =============================================================================
+# START / STOP / PAUSE / RESUME / STATUS
+# =============================================================================
+
 @companion_app.command(name="start", help="Start the persistent companion voice and screen session.")
 def start_cmd(
-    mode: Optional[str] = typer.Option(None, "--mode", "-m", help="Mode: passive, companion, focus, work_assistant, privacy"),
+    mode: Optional[str] = typer.Option(None, "--mode", "-m", help="companion, focus, study, night, passive, privacy"),
     screen: Optional[bool] = typer.Option(None, "--screen", help="Enable/disable screen observation"),
     voice: Optional[bool] = typer.Option(None, "--voice", help="Enable/disable voice speech"),
 ) -> None:
@@ -50,7 +75,7 @@ def start_cmd(
         try:
             config.mode = CompanionMode(mode.lower())
         except ValueError:
-            console.print(f"[red]Invalid mode '{mode}'. Choose from: passive, companion, focus, work_assistant, privacy[/red]")
+            console.print(f"[red]Invalid mode '{mode}'. Choose from: companion, focus, study, night, passive, privacy[/red]")
             raise typer.Exit(1)
 
     if screen is not None:
@@ -65,37 +90,72 @@ def start_cmd(
     ui.run_interactive_session()
 
 
+@companion_app.command(name="stop", help="Stop any active background companion instance.")
+def stop_cmd() -> None:
+    """Stop active companion instances."""
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    mgr = StartupManager(cfg.storage_directory)
+    mgr.release_instance_lock()
+    console.print("[green]✔ Companion session stopped and lock released.[/green]")
+
+
+@companion_app.command(name="pause", help="Pause companion speech and proactive remarks.")
+def pause_cmd() -> None:
+    """Pause companion."""
+    storage = CompanionStorage()
+    config = storage.load_config()
+    storage.log_activity("cli_pause", {})
+    console.print("[yellow]⏸️ Companion paused.[/yellow]")
+
+
+@companion_app.command(name="resume", help="Resume companion operations.")
+def resume_cmd() -> None:
+    """Resume companion."""
+    storage = CompanionStorage()
+    storage.log_activity("cli_resume", {})
+    console.print("[green]▶️ Companion resumed.[/green]")
+
+
 @companion_app.command(name="status", help="Show companion configuration, active mode, and health status.")
 def status_cmd() -> None:
     """Display comprehensive status table."""
     storage = CompanionStorage()
     config = storage.load_config()
     memory = MemoryEngine(config.storage_directory)
+    time_engine = TimeAwarenessEngine()
+    startup_mgr = StartupManager(config.storage_directory)
 
     table = Table(title="💖 Electorn Companion Status", border_style="magenta")
     table.add_column("Property", style="bold cyan")
     table.add_column("Value", style="white")
 
     table.add_row("Name", config.personality.name)
-    table.add_row("User Address", f"{config.personality.preferred_address} ({config.personality.user_name})")
+    table.add_row("User", config.personality.user_name)
+    table.add_row("Preferred Address", config.personality.preferred_address)
     table.add_row("Operating Mode", config.mode.value.upper())
-    table.add_row("Affection Level", config.personality.affection_intensity.value)
-    table.add_row("Humor Level", config.personality.humor_level.value)
-    table.add_row("Language", f"{config.personality.language} (Tamil code-switch: {config.personality.code_switch_tamil})")
+    table.add_row("System Clock", time_engine.get_formatted_time())
+    table.add_row("Bedtime", f"{config.bedtime.bedtime} (Reminders: {'ON' if config.bedtime.enabled else 'OFF'})")
+    table.add_row("Quiet Hours", f"{config.bedtime.quiet_hours_start} to {config.bedtime.quiet_hours_end}")
+    table.add_row("Windows Startup", "Enabled" if startup_mgr.is_startup_enabled() else "Disabled")
     table.add_row("Voice Output", "Enabled" if config.voice_enabled else "Disabled")
     table.add_row("Barge-In Interrupt", "Enabled" if config.barge_in_enabled else "Disabled")
+    table.add_row("Proactive Conversations", "Enabled" if config.proactive.enabled else "Disabled")
     table.add_row("Screen Observation", "Enabled" if config.screen.enabled else "Disabled (Opt-in required)")
     table.add_row("Screen Interval", f"{config.screen.interval_seconds} seconds")
     table.add_row("Vision Model", config.screen.vision_model)
-    table.add_row("Quiet Hours", f"{config.personality.quiet_hours_start} to {config.personality.quiet_hours_end}")
     table.add_row("Stored Memories", str(len(memory.load_all())))
 
     console.print(table)
 
 
+# =============================================================================
+# OPERATING MODE COMMAND
+# =============================================================================
+
 @companion_app.command(name="mode", help="Switch companion operating mode.")
 def mode_cmd(
-    new_mode: str = typer.Argument(..., help="Mode: passive, companion, focus, work_assistant, privacy")
+    new_mode: str = typer.Argument(..., help="Mode: companion, focus, study, night, passive, privacy")
 ) -> None:
     """Switch operating mode."""
     storage = CompanionStorage()
@@ -103,7 +163,7 @@ def mode_cmd(
     try:
         mode_enum = CompanionMode(new_mode.lower())
     except ValueError:
-        console.print(f"[red]Invalid mode '{new_mode}'. Valid choices: passive, companion, focus, work_assistant, privacy[/red]")
+        console.print(f"[red]Invalid mode '{new_mode}'. Valid choices: companion, focus, study, night, passive, privacy[/red]")
         raise typer.Exit(1)
 
     config.mode = mode_enum
@@ -111,83 +171,199 @@ def mode_cmd(
     console.print(f"[bold green]✔ Switched mode to: {mode_enum.value.upper()}[/bold green]")
 
 
-@companion_app.command(name="personality", help="Configure companion persona, address title, and affection.")
-def personality_cmd(
-    name: Optional[str] = typer.Option(None, "--name", help="Companion name (e.g. Aria)"),
-    address: Optional[str] = typer.Option(None, "--address", help="Preferred address (e.g. Darling, Babe, Dear)"),
-    user_name: Optional[str] = typer.Option(None, "--user", help="User name (e.g. Harshan)"),
-    affection: Optional[str] = typer.Option(None, "--affection", help="low, medium, high"),
-    humor: Optional[str] = typer.Option(None, "--humor", help="low, medium, high"),
-    tamil: Optional[bool] = typer.Option(None, "--tamil", help="Enable/disable Tamil code-switching"),
-) -> None:
-    """Update companion persona settings."""
+@companion_app.command(name="privacy", help="Immediately engage Privacy Mode (disable mic and screen).")
+def privacy_cmd() -> None:
+    """Engage Privacy Mode."""
     storage = CompanionStorage()
     config = storage.load_config()
-
-    if name:
-        config.personality.name = name
-    if address:
-        config.personality.preferred_address = address
-    if user_name:
-        config.personality.user_name = user_name
-    if affection:
-        try:
-            config.personality.affection_intensity = AffectionIntensity(affection.lower())
-        except ValueError:
-            console.print("[red]Invalid affection level. Use: low, medium, high[/red]")
-    if humor:
-        try:
-            config.personality.humor_level = HumorLevel(humor.lower())
-        except ValueError:
-            console.print("[red]Invalid humor level. Use: low, medium, high[/red]")
-    if tamil is not None:
-        config.personality.code_switch_tamil = tamil
-
+    config.mode = CompanionMode.PRIVACY
+    config.screen.enabled = False
     storage.save_config(config)
-    console.print("[bold green]✔ Companion personality settings updated successfully.[/bold green]")
+    console.print("[bold red]✔ Privacy Mode engaged. Microphone and screen observation completely disabled.[/bold red]")
 
 
-@companion_app.command(name="screen", help="Configure screen observation privacy and capture settings.")
-def screen_cmd(
-    enable: Optional[bool] = typer.Option(None, "--enable/--disable", help="Toggle screen observation"),
-    interval: Optional[int] = typer.Option(None, "--interval", help="Seconds between screen captures (min: 5)"),
-) -> None:
-    """Update screen observation configuration."""
+# =============================================================================
+# WINDOWS STARTUP SUBCOMMANDS
+# =============================================================================
+
+@startup_subapp.command(name="enable", help="Enable automatic startup on Windows login.")
+def startup_enable_cmd() -> None:
     storage = CompanionStorage()
-    config = storage.load_config()
+    cfg = storage.load_config()
+    mgr = StartupManager(cfg.storage_directory)
+    ok, msg = mgr.enable_startup()
+    if ok:
+        cfg.startup.enabled = True
+        storage.save_config(cfg)
+        console.print(f"[bold green]✔ {msg}[/bold green]")
+    else:
+        console.print(f"[bold red]❌ {msg}[/bold red]")
 
-    if enable is not None:
-        config.screen.enabled = enable
-    if interval is not None:
-        config.screen.interval_seconds = max(5, interval)
 
-    storage.save_config(config)
-    status_str = "ENABLED" if config.screen.enabled else "DISABLED"
-    console.print(f"[bold green]✔ Screen observation is now: {status_str} (Interval: {config.screen.interval_seconds}s)[/bold green]")
-
-
-@companion_app.command(name="voice", help="Configure voice speech, gender, and barge-in.")
-def voice_cmd(
-    enable: Optional[bool] = typer.Option(None, "--enable/--disable", help="Toggle voice speech"),
-    gender: Optional[str] = typer.Option(None, "--gender", help="female or male"),
-    barge_in: Optional[bool] = typer.Option(None, "--barge-in/--no-barge-in", help="Toggle barge-in speech interruption"),
-    speed: Optional[float] = typer.Option(None, "--speed", help="Speaking speed factor (e.g. 1.0)"),
-) -> None:
-    """Update voice parameters."""
+@startup_subapp.command(name="disable", help="Disable automatic startup on Windows login.")
+def startup_disable_cmd() -> None:
     storage = CompanionStorage()
-    config = storage.load_config()
+    cfg = storage.load_config()
+    mgr = StartupManager(cfg.storage_directory)
+    ok, msg = mgr.disable_startup()
+    if ok:
+        cfg.startup.enabled = False
+        storage.save_config(cfg)
+        console.print(f"[bold green]✔ {msg}[/bold green]")
+    else:
+        console.print(f"[bold red]❌ {msg}[/bold red]")
 
-    if enable is not None:
-        config.voice_enabled = enable
-    if gender and gender.lower() in ("female", "male"):
-        config.personality.voice_gender = gender.lower()
-    if barge_in is not None:
-        config.barge_in_enabled = barge_in
-    if speed is not None:
-        config.personality.speaking_speed = max(0.5, min(2.0, speed))
 
-    storage.save_config(config)
-    console.print("[bold green]✔ Companion voice configuration updated.[/bold green]")
+@startup_subapp.command(name="status", help="Check Windows startup registration status.")
+def startup_status_cmd() -> None:
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    mgr = StartupManager(cfg.storage_directory)
+    is_on = mgr.is_startup_enabled()
+    status_str = "[bold green]ENABLED[/bold green]" if is_on else "[yellow]DISABLED[/yellow]"
+    console.print(f"Windows Automatic Login Startup: {status_str}")
+
+
+# =============================================================================
+# BEDTIME & QUIET HOURS SUBCOMMANDS
+# =============================================================================
+
+@bedtime_subapp.command(name="set", help="Set bedtime target (e.g. 23:30 or 11:30 PM).")
+def bedtime_set_cmd(time_str: str = typer.Argument(..., help="Time in HH:MM format (24-hour)")) -> None:
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    cfg.bedtime.bedtime = time_str.strip()
+    storage.save_config(cfg)
+    console.print(f"[bold green]✔ Bedtime updated to: {cfg.bedtime.bedtime}[/bold green]")
+
+
+@quiet_hours_subapp.command(name="set", help="Set quiet hours interval (e.g. 23:00 07:00).")
+def quiet_hours_set_cmd(
+    start: str = typer.Argument(..., help="Start time in HH:MM (e.g. 23:00)"),
+    end: str = typer.Argument(..., help="End time in HH:MM (e.g. 07:00)"),
+) -> None:
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    cfg.bedtime.quiet_hours_start = start.strip()
+    cfg.bedtime.quiet_hours_end = end.strip()
+    storage.save_config(cfg)
+    console.print(f"[bold green]✔ Quiet hours updated: {start} to {end}[/bold green]")
+
+
+# =============================================================================
+# VOICE & PROACTIVE TOGGLES
+# =============================================================================
+
+@voice_subapp.command(name="on", help="Enable voice output.")
+def voice_on_cmd() -> None:
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    cfg.voice_enabled = True
+    storage.save_config(cfg)
+    console.print("[bold green]✔ Companion voice enabled.[/bold green]")
+
+
+@voice_subapp.command(name="off", help="Disable voice output.")
+def voice_off_cmd() -> None:
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    cfg.voice_enabled = False
+    storage.save_config(cfg)
+    console.print("[yellow]✔ Companion voice disabled.[/yellow]")
+
+
+@voice_subapp.command(name="status", help="Show voice engine configuration.")
+def voice_status_cmd() -> None:
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    console.print(f"Voice Enabled: {cfg.voice_enabled} | Language: {cfg.personality.language} | Barge-in: {cfg.barge_in_enabled}")
+
+
+@proactive_subapp.command(name="on", help="Enable proactive conversations.")
+def proactive_on_cmd() -> None:
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    cfg.proactive.enabled = True
+    storage.save_config(cfg)
+    console.print("[bold green]✔ Proactive conversations enabled.[/bold green]")
+
+
+@proactive_subapp.command(name="off", help="Disable proactive conversations.")
+def proactive_off_cmd() -> None:
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    cfg.proactive.enabled = False
+    storage.save_config(cfg)
+    console.print("[yellow]✔ Proactive conversations disabled.[/yellow]")
+
+
+@proactive_subapp.command(name="status", help="Show proactive speech configuration.")
+def proactive_status_cmd() -> None:
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    console.print(f"Proactive Enabled: {cfg.proactive.enabled} | Max/Hour: {cfg.proactive.max_per_hour} | Min Interval: {cfg.proactive.min_interval_seconds}s")
+
+
+@focus_subapp.command(name="on", help="Enable focus mode.")
+def focus_on_cmd() -> None:
+    mode_cmd("focus")
+
+
+@focus_subapp.command(name="off", help="Disable focus mode (return to companion mode).")
+def focus_off_cmd() -> None:
+    mode_cmd("companion")
+
+
+# =============================================================================
+# SCREEN SUBCOMMANDS
+# =============================================================================
+
+@screen_subapp.command(name="enable", help="Enable screen observation.")
+def screen_enable_cmd() -> None:
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    cfg.screen.enabled = True
+    storage.save_config(cfg)
+    console.print("[bold green]✔ Screen observation ENABLED.[/bold green]")
+
+
+@screen_subapp.command(name="disable", help="Disable screen observation.")
+def screen_disable_cmd() -> None:
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    cfg.screen.enabled = False
+    storage.save_config(cfg)
+    console.print("[yellow]✔ Screen observation DISABLED.[/yellow]")
+
+
+@screen_subapp.command(name="status", help="Show screen observation status.")
+def screen_status_cmd() -> None:
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    status = "ENABLED" if cfg.screen.enabled else "DISABLED"
+    console.print(f"Screen Observation: {status} (Interval: {cfg.screen.interval_seconds}s, Vision Model: {cfg.screen.vision_model})")
+
+
+@screen_subapp.command(name="exclusions", help="List excluded sensitive applications.")
+def screen_exclusions_cmd() -> None:
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    console.print("[bold cyan]Excluded Applications:[/bold cyan]")
+    for app in cfg.screen.excluded_apps:
+        console.print(f"  - {app}")
+
+
+# =============================================================================
+# ACTIVITY & MEMORY SUBCOMMANDS
+# =============================================================================
+
+@activity_subapp.command(name="summary", help="Show summary of observed activity.")
+def activity_summary_cmd() -> None:
+    storage = CompanionStorage()
+    records = storage.load_recent_activity(limit=20)
+    console.print(f"[bold cyan]Recent Observations & Activities ({len(records)} entries):[/bold cyan]")
+    for r in records[:10]:
+        console.print(f"- [dim]{r.get('type')}[/dim]: {str(r.get('details', {}))[:80]}")
 
 
 @companion_app.command(name="memory", help="Inspect and manage persistent companion memories.")
@@ -250,33 +426,15 @@ def memory_cmd(
             console.print("[yellow]✔ All companion memories cleared.[/yellow]")
 
 
-@companion_app.command(name="activity", help="Show recent companion observations and activity.")
-def activity_cmd(limit: int = typer.Option(15, "--limit", "-n", help="Number of records to show")) -> None:
-    """Display audit log entries."""
+@companion_app.command(name="config", help="View current companion configuration.")
+def config_cmd() -> None:
     storage = CompanionStorage()
-    records = storage.load_recent_activity(limit=limit)
-    if not records:
-        console.print("[yellow]No recent companion activity logged.[/yellow]")
-        return
-
-    table = Table(title="Recent Companion Activity", border_style="magenta")
-    table.add_column("Time", style="dim")
-    table.add_column("Activity Type", style="cyan")
-    table.add_column("Details", style="white")
-
-    for rec in records:
-        import datetime
-        dt = datetime.datetime.fromtimestamp(rec.get("timestamp", 0)).strftime("%H:%M:%S")
-        act_type = rec.get("type", "unknown")
-        details = str(rec.get("details", {}))[:70]
-        table.add_row(dt, act_type, details)
-
-    console.print(table)
+    cfg = storage.load_config()
+    console.print(cfg.model_dump_json(indent=2))
 
 
 @companion_app.command(name="reset", help="Reset companion settings to fresh factory defaults.")
 def reset_cmd() -> None:
-    """Reset configuration to default values."""
     confirm = typer.confirm("Reset companion configuration to defaults?")
     if confirm:
         storage = CompanionStorage()

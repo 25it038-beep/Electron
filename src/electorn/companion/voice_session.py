@@ -1,4 +1,4 @@
-"""Continuous voice session engine with barge-in interruption support."""
+"""Continuous voice session engine with barge-in interruption and mute controls."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import io
 import logging
 import threading
 import time
-from typing import Callable, Optional
+from typing import Callable, Dict, List, Optional
 
 from electorn.voice import VoiceEngine, VOICE_DEPS_AVAILABLE
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class CompanionVoiceSession:
-    """Manages persistent voice listening, continuous turn-taking, and instant speech interruption."""
+    """Manages persistent voice listening, continuous turn-taking, mute controls, and speech interruption."""
 
     def __init__(
         self,
@@ -40,8 +40,29 @@ class CompanionVoiceSession:
         self.barge_in_enabled = barge_in_enabled
         self.is_running = False
         self._is_speaking = False
+        self._is_muted = False
         self._interrupted_event = threading.Event()
         self._speech_thread: Optional[threading.Thread] = None
+
+    def mute(self) -> None:
+        """Immediately mute microphone and halt active speech."""
+        self._is_muted = True
+        self.interrupt_speech()
+
+    def unmute(self) -> None:
+        """Unmute microphone."""
+        self._is_muted = False
+
+    def toggle_mute(self) -> bool:
+        """Toggle mute state. Returns new state."""
+        self._is_muted = not self._is_muted
+        if self._is_muted:
+            self.interrupt_speech()
+        return self._is_muted
+
+    def is_muted(self) -> bool:
+        """Check if voice session is currently muted."""
+        return self._is_muted
 
     def interrupt_speech(self) -> None:
         """Instantly stop companion speech playback when the user interrupts."""
@@ -66,7 +87,7 @@ class CompanionVoiceSession:
         language_override: Optional[str] = None,
     ) -> None:
         """Speak out text with barge-in support."""
-        if not text or not text.strip():
+        if not text or not text.strip() or self._is_muted:
             return
 
         self.interrupt_speech()
@@ -78,7 +99,6 @@ class CompanionVoiceSession:
 
         try:
             target_lang = language_override or self.language
-            # Synthesize & play through engine
             self.engine.speak(text, async_mode=False, language_override=target_lang)
         except Exception as e:
             logger.debug("Voice output error: %s", e)
@@ -95,6 +115,9 @@ class CompanionVoiceSession:
         language_override: Optional[str] = None,
     ) -> None:
         """Non-blocking speech invocation."""
+        if self._is_muted:
+            return
+
         t = threading.Thread(
             target=self.speak,
             args=(text, on_start_cb, on_finish_cb, language_override),
@@ -109,8 +132,8 @@ class CompanionVoiceSession:
         status_cb: Optional[Callable[[str], None]] = None,
         language_override: Optional[str] = None,
     ) -> Optional[str]:
-        """Listen to the microphone and return transcribed text."""
-        if not self.engine.is_supported():
+        """Listen to the microphone and return transcribed text with error recovery."""
+        if self._is_muted or not self.engine.is_supported():
             return None
 
         # Check for interrupt during user speech
@@ -118,8 +141,20 @@ class CompanionVoiceSession:
             self.interrupt_speech()
 
         target_lang = language_override or self.language
-        return self.engine.listen_and_transcribe(
-            record_seconds=timeout_seconds,
-            status_cb=status_cb,
-            language_override=target_lang,
-        )
+
+        # Retry loop with exponential backoff on temporary network hiccup
+        for attempt in range(2):
+            try:
+                return self.engine.listen_and_transcribe(
+                    record_seconds=timeout_seconds,
+                    status_cb=status_cb,
+                    language_override=target_lang,
+                )
+            except Exception as e:
+                logger.debug("Transcription attempt %d failed: %s", attempt + 1, e)
+                if attempt == 0:
+                    time.sleep(0.5)
+                else:
+                    return None
+
+        return None

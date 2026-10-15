@@ -1,4 +1,4 @@
-"""Central supervisor orchestrating Companion Mode state, perception, voice, and tools."""
+"""Central supervisor orchestrating Companion Mode state, perception, voice, time, and tools."""
 
 from __future__ import annotations
 
@@ -7,18 +7,23 @@ import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
 
+from electorn.companion.activity_classifier import ActivityClassifier
 from electorn.companion.memory import MemoryEngine
 from electorn.companion.personality import PersonalityEngine
 from electorn.companion.proactive_scheduler import ProactiveScheduler
 from electorn.companion.schema import (
+    ActivityCategory,
     CompanionConfig,
+    CompanionLifecycleState,
     CompanionMode,
     CompanionState,
     ProactiveEvent,
     ScreenObservationReport,
 )
 from electorn.companion.screen_observer import ScreenObservationEngine
+from electorn.companion.startup import StartupManager
 from electorn.companion.storage import CompanionStorage
+from electorn.companion.time_engine import TimeAwarenessEngine
 from electorn.companion.tools import CompanionTools
 from electorn.companion.vision_analyzer import VisionAnalyzer
 from electorn.companion.voice_session import CompanionVoiceSession
@@ -28,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class CompanionSupervisor:
-    """Master controller managing Companion Mode lifecycle, background observation, and conversational intelligence."""
+    """Master controller managing Companion Mode lifecycle, background observation, bedtime, and conversational intelligence."""
 
     def __init__(
         self,
@@ -40,9 +45,12 @@ class CompanionSupervisor:
         self.state = CompanionState(active_mode=self.config.mode)
 
         # Core Subsystems
+        self.time_engine = TimeAwarenessEngine()
+        self.activity_classifier = ActivityClassifier(self.config.activity)
+        self.startup_manager = StartupManager(self.config.storage_directory)
         self.personality = PersonalityEngine(self.config.personality)
         self.memory = MemoryEngine(self.config.storage_directory)
-        self.screen_observer = ScreenObservationEngine(self.config.screen)
+        self.screen_observer = ScreenObservationEngine(self.config.screen, self.activity_classifier)
         self.vision_analyzer = VisionAnalyzer(self.config.screen)
         self.scheduler = ProactiveScheduler(self.config, self.state)
         self.tools = CompanionTools()
@@ -67,13 +75,17 @@ class CompanionSupervisor:
     # =========================================================================
 
     def start(self) -> None:
-        """Initialize and start background loops and companion greeting."""
+        """Initialize and start background loops, single-instance check, and startup greeting."""
         if self._running:
             return
+
+        # Acquire single-instance lock
+        self.startup_manager.acquire_instance_lock()
 
         self._running = True
         self.state.session_start_time = time.time()
         self.state.is_paused = False
+        self.state.current_lifecycle = CompanionLifecycleState.STARTING
 
         # Apply mode constraints
         self._apply_mode_rules(self.state.active_mode)
@@ -85,18 +97,27 @@ class CompanionSupervisor:
         self._sched_thread = threading.Thread(target=self._proactive_scheduler_loop, daemon=True)
         self._sched_thread.start()
 
-        # Log session start
+        # Check startup greeting
+        startup_evt = self.scheduler.check_startup_greeting()
+        if startup_evt:
+            greeting = self.personality.generate_greeting()
+            self._handle_proactive_speech(greeting, "startup")
+
+        self.state.current_lifecycle = CompanionLifecycleState.READY
         self.storage.log_activity("session_start", {"mode": self.state.active_mode.value})
+        self._notify_state_change()
 
     def stop(self) -> None:
-        """Shut down background threads and release audio resources."""
+        """Shut down background threads and release audio and lock resources."""
         self._running = False
         self.voice.interrupt_speech()
+        self.startup_manager.release_instance_lock()
         self.storage.log_activity("session_stop", {"mode": self.state.active_mode.value})
 
     def pause(self) -> None:
         """Temporarily pause all audio output and proactive interruptions."""
         self.state.is_paused = True
+        self.state.current_lifecycle = CompanionLifecycleState.PAUSED
         self.voice.interrupt_speech()
         self.storage.log_activity("session_paused", {})
         self._notify_state_change()
@@ -104,7 +125,22 @@ class CompanionSupervisor:
     def resume(self) -> None:
         """Resume active companion services."""
         self.state.is_paused = False
+        self.state.current_lifecycle = CompanionLifecycleState.READY
         self.storage.log_activity("session_resumed", {})
+        self._notify_state_change()
+
+    def mute(self) -> None:
+        """Immediately mute microphone and halt active speech."""
+        self.state.is_muted = True
+        self.voice.mute()
+        self.storage.log_activity("voice_muted", {})
+        self._notify_state_change()
+
+    def unmute(self) -> None:
+        """Unmute microphone."""
+        self.state.is_muted = False
+        self.voice.unmute()
+        self.storage.log_activity("voice_unmuted", {})
         self._notify_state_change()
 
     def set_mode(self, mode: CompanionMode) -> None:
@@ -117,24 +153,30 @@ class CompanionSupervisor:
         self._notify_state_change()
 
     def _apply_mode_rules(self, mode: CompanionMode) -> None:
-        """Enforce strict hardware and perception rules based on active mode."""
+        """Enforce strict hardware, perception, and silence rules based on mode."""
         if mode == CompanionMode.PRIVACY:
             self.state.mic_active = False
             self.state.screen_active = False
             self.screen_observer.config.enabled = False
             self.voice.interrupt_speech()
+            self.state.current_lifecycle = CompanionLifecycleState.QUIET
         elif mode == CompanionMode.PASSIVE:
-            self.state.mic_active = self.config.voice_enabled
+            self.state.mic_active = self.config.voice_enabled and not self.state.is_muted
             self.state.screen_active = False
             self.screen_observer.config.enabled = False
-        elif mode == CompanionMode.FOCUS:
-            self.state.mic_active = self.config.voice_enabled
+            self.state.current_lifecycle = CompanionLifecycleState.READY
+        elif mode in (CompanionMode.FOCUS, CompanionMode.NIGHT):
+            self.state.mic_active = self.config.voice_enabled and not self.state.is_muted
             self.state.screen_active = self.config.screen.enabled
             self.screen_observer.config.enabled = self.config.screen.enabled
-        elif mode in (CompanionMode.COMPANION, CompanionMode.WORK_ASSISTANT):
-            self.state.mic_active = self.config.voice_enabled
+            self.state.current_lifecycle = CompanionLifecycleState.QUIET if mode == CompanionMode.NIGHT else CompanionLifecycleState.READY
+        elif mode in (CompanionMode.COMPANION, CompanionMode.STUDY, CompanionMode.WORK_ASSISTANT):
+            self.state.mic_active = self.config.voice_enabled and not self.state.is_muted
             self.state.screen_active = self.config.screen.enabled
             self.screen_observer.config.enabled = self.config.screen.enabled
+            if mode == CompanionMode.STUDY and not self.state.study_session_start_time:
+                self.state.study_session_start_time = time.time()
+            self.state.current_lifecycle = CompanionLifecycleState.READY
 
     def _notify_state_change(self) -> None:
         if self.on_state_change_cb:
@@ -160,32 +202,48 @@ class CompanionSupervisor:
                 if self.state.active_mode in (CompanionMode.PRIVACY, CompanionMode.PASSIVE):
                     continue
 
+                self.state.current_lifecycle = CompanionLifecycleState.MONITORING
                 img, report = self.screen_observer.capture_screen()
                 self.state.active_window_title = report.window_title
+                self.state.current_activity = report.activity_category
 
                 if img is not None:
                     # Run vision analyzer
                     analyzed_report = self.vision_analyzer.analyze(img, report)
                     self.latest_report = analyzed_report
 
+                    # Check for distraction alerts
+                    distract_evt = self.scheduler.check_distraction_event(analyzed_report)
+                    if distract_evt:
+                        self._handle_proactive_event(distract_evt)
+
                     # Check for proactive error alert
-                    evt = self.scheduler.check_observation_event(analyzed_report)
-                    if evt:
-                        self._handle_proactive_event(evt)
+                    err_evt = self.scheduler.check_observation_event(analyzed_report)
+                    if err_evt:
+                        self._handle_proactive_event(err_evt)
+
+                self.state.current_lifecycle = CompanionLifecycleState.READY
             except Exception as e:
                 logger.debug("Error in screen observation loop: %s", e)
 
     def _proactive_scheduler_loop(self) -> None:
-        """Periodically checks time-based milestones and idle check-ins."""
+        """Periodically checks bedtime stages, break milestones, and idle check-ins."""
         while self._running:
             try:
                 time.sleep(15)
                 if self.state.is_paused or self.state.active_mode in (CompanionMode.PRIVACY, CompanionMode.PASSIVE):
                     continue
 
-                evt = self.scheduler.check_time_based_events()
-                if evt:
-                    self._handle_proactive_event(evt)
+                # 1. Check bedtime stages
+                bed_evt = self.scheduler.check_bedtime_event()
+                if bed_evt:
+                    self._handle_proactive_event(bed_evt)
+
+                # 2. Check time milestones
+                time_evt = self.scheduler.check_time_based_events()
+                if time_evt:
+                    self._handle_proactive_event(time_evt)
+
             except Exception as e:
                 logger.debug("Error in proactive scheduler loop: %s", e)
 
@@ -195,71 +253,56 @@ class CompanionSupervisor:
         evt.delivered = True
         evt.delivered_timestamp = time.time()
         self.scheduler.record_speech_delivered()
+        self._handle_proactive_speech(speech, evt.event_type, evt.title)
 
+    def _handle_proactive_speech(self, speech: str, event_type: str, title: str = "") -> None:
+        """Dispatch proactive speech."""
         self.storage.log_activity("proactive_speech", {
-            "event_type": evt.event_type,
-            "title": evt.title,
+            "event_type": event_type,
+            "title": title,
             "speech": speech,
         })
 
         if self.on_message_cb:
             self.on_message_cb(self.config.personality.name, speech)
 
-        if self.config.voice_enabled and self.state.active_mode != CompanionMode.PRIVACY:
-            self.voice.speak_async(speech)
+        if self.config.voice_enabled and not self.state.is_muted and self.state.active_mode != CompanionMode.PRIVACY:
+            self.state.current_lifecycle = CompanionLifecycleState.SPEAKING
+            self.voice.speak_async(speech, on_finish_cb=self._on_speech_finished)
+
+    def _on_speech_finished(self) -> None:
+        self.state.current_lifecycle = CompanionLifecycleState.READY
+        self._notify_state_change()
 
     # =========================================================================
-    # CONVERSATIONAL TURN PROCESSING
+    # CONVERSATIONAL TURN PROCESSING & INTENT DISPATCH
     # =========================================================================
 
     def process_user_input(self, text: str) -> str:
-        """Process user query, extract memory, consult tools/screen, and reply."""
+        """Process user query, intercept voice commands, consult context, and reply."""
         clean_text = text.strip()
         if not clean_text:
             return ""
 
         self.state.last_user_speech_time = time.time()
+        self.state.current_lifecycle = CompanionLifecycleState.THINKING
 
-        # Check for mode switch voice commands
-        lower = clean_text.lower()
-        if any(w in lower for w in ("focus mode", "switch to focus", "enter focus")):
-            self.set_mode(CompanionMode.FOCUS)
-            reply = f"Switching to Focus Mode, {self.config.personality.preferred_address}. I'll stay quiet and keep distractions away."
-            self._dispatch_reply(reply)
-            return reply
+        # Intercept Voice Commands
+        command_reply = self._handle_voice_commands(clean_text)
+        if command_reply:
+            self._dispatch_reply(command_reply)
+            return command_reply
 
-        if any(w in lower for w in ("companion mode", "switch to companion", "girlfriend mode")):
-            self.set_mode(CompanionMode.COMPANION)
-            reply = f"Companion Mode activated, {self.config.personality.preferred_address}! I'm right here with you."
-            self._dispatch_reply(reply)
-            return reply
-
-        if any(w in lower for w in ("privacy mode", "switch to privacy", "disable mic")):
-            self.set_mode(CompanionMode.PRIVACY)
-            reply = "Privacy Mode active. Microphone and screen observation have been turned off completely."
-            self._dispatch_reply(reply)
-            return reply
-
-        if any(w in lower for w in ("work assistant mode", "assistant mode")):
-            self.set_mode(CompanionMode.WORK_ASSISTANT)
-            reply = f"Work Assistant mode engaged, {self.config.personality.preferred_address}. Ready to inspect code and run tests."
-            self._dispatch_reply(reply)
-            return reply
-
-        # Check for tool intent
-        tool_reply = self._handle_direct_tool_intent(clean_text)
-        if tool_reply:
-            self._dispatch_reply(tool_reply)
-            return tool_reply
-
-        # Auto-extract and persist preferences
+        # Auto-extract and persist preferences into memory
         if self.config.memory_enabled:
             self.memory.extract_and_remember(clean_text)
 
         # Retrieve relevant memories and screen context
         memories = self.memory.get_prompt_context(limit=6) if self.config.memory_enabled else []
         screen_ctx = ""
+        dur_min = 0
         if self.latest_report and not self.latest_report.is_excluded:
+            dur_min = int(self.latest_report.sustained_duration_seconds / 60)
             screen_ctx = f"Active window: {self.latest_report.window_title} ({self.latest_report.app_category}). {self.latest_report.visible_summary}"
             if self.latest_report.visible_error:
                 screen_ctx += f" Noticeable error: {self.latest_report.visible_error}"
@@ -269,43 +312,120 @@ class CompanionSupervisor:
             current_mode=self.state.active_mode,
             context_memories=memories,
             screen_context=screen_ctx or None,
+            current_activity=self.state.current_activity.value,
+            sustained_duration_minutes=dur_min,
         )
 
-        # Call local LLM provider
+        # Query Ollama LLM provider
         raw_reply = self.llm.ask(prompt=clean_text, system_prompt=sys_prompt)
         clean_reply = self.personality.sanitize_llm_response(raw_reply)
 
         if not clean_reply:
-            clean_reply = f"I'm right here with you, {self.config.personality.preferred_address}."
+            clean_reply = f"I'm right here with you, {self.config.personality.user_name}."
 
         self._dispatch_reply(clean_reply)
         return clean_reply
 
-    def _handle_direct_tool_intent(self, text: str) -> Optional[str]:
-        """Detect and execute direct companion tool commands."""
+    def _handle_voice_commands(self, text: str) -> Optional[str]:
+        """Detect and execute natural voice commands."""
         lower = text.lower()
-        pref = self.config.personality.preferred_address
+        user = self.config.personality.user_name
 
-        # Run tests
-        if any(w in lower for w in ("run tests", "run pytest", "run the test suite", "test the project")):
+        # 1. Mode switches
+        if any(w in lower for w in ("focus mode", "switch to focus", "enter focus")):
+            self.set_mode(CompanionMode.FOCUS)
+            return f"Switching to Focus Mode, {user}. I'll stay quiet and keep distractions away."
+
+        if any(w in lower for w in ("study mode", "stay quiet while i study", "switch to study")):
+            self.set_mode(CompanionMode.STUDY)
+            return f"Study Mode active, {user}. I'll track your study session and keep distractions to a minimum."
+
+        if any(w in lower for w in ("night mode", "switch to night")):
+            self.set_mode(CompanionMode.NIGHT)
+            return f"Night Mode enabled, {user}. Let's wind down for a restful night."
+
+        if any(w in lower for w in ("companion mode", "switch to companion", "normal mode")):
+            self.set_mode(CompanionMode.COMPANION)
+            return f"Companion Mode activated, {user}! I'm right here with you."
+
+        if any(w in lower for w in ("privacy mode", "switch to privacy", "disable mic and screen")):
+            self.set_mode(CompanionMode.PRIVACY)
+            return "Privacy Mode active. Microphone and screen observation have been turned off completely."
+
+        # 2. Mute / Silence controls
+        if any(w in lower for w in ("stop listening", "mute microphone", "mute mic")):
+            self.mute()
+            return f"Microphone muted, {user}. You can type or say 'unmute' whenever you need me."
+
+        if any(w in lower for w in ("be quiet for a while", "don't interrupt me for the next hour", "quiet for an hour")):
+            self.config.proactive.enabled = False
+            return f"Understood {user}, I will remain quiet and won't interrupt you."
+
+        if "talk in tamil" in lower or "let's talk in tamil" in lower:
+            self.config.personality.code_switch_tamil = True
+            self.config.personality.language = "ta-IN"
+            return f"Kandippa {user}, inimey Tamil-la pesuvom!"
+
+        # 3. Status queries: "What am I doing right now?"
+        if any(w in lower for w in ("what am i doing right now", "what is my activity", "current activity")):
+            app_str = self.state.active_window_title or "desktop"
+            act_str = self.state.current_activity.value
+            dur_min = int((time.time() - self.state.activity_start_time) / 60)
+            return f"{user}, you're currently in {app_str}. It looks like {act_str}, and you've been on it for about {dur_min} minutes."
+
+        # 4. Status queries: "Am I wasting time?"
+        if any(w in lower for w in ("am i wasting time", "am i distracted")):
+            if self.state.current_activity in (ActivityCategory.WATCHING_VIDEOS, ActivityCategory.ENTERTAINMENT, ActivityCategory.GAMING):
+                dur_min = int((time.time() - self.state.activity_start_time) / 60)
+                return f"{user}, you've been on {self.state.current_activity.value} for about {dur_min} minutes. If this is a planned break, that's fine; otherwise, want me to help you get back to work?"
+            return f"Not at all {user}, you've been engaged in {self.state.current_activity.value}. Keep up the great focus!"
+
+        # 5. Status queries: "How long have I been working?"
+        if any(w in lower for w in ("how long have i been working", "session duration", "work duration")):
+            total_min = int((time.time() - self.state.session_start_time) / 60)
+            return f"{user}, you've been working for {total_min} minutes in this session."
+
+        # 6. Check my screen
+        if any(w in lower for w in ("check my screen", "inspect my screen", "look at my screen")):
+            if not self.config.screen.enabled:
+                return f"{user}, screen observation is currently disabled. You can enable it with 'electorn companion screen --enable'."
+            img, report = self.screen_observer.capture_screen()
+            if img:
+                analyzed = self.vision_analyzer.analyze(img, report)
+                self.latest_report = analyzed
+                return f"{user}, I inspected your screen: {analyzed.visible_summary}"
+            return f"{user}, I couldn't capture the screen right now."
+
+        # 7. Bedtime settings: "Remind me to sleep at 11:30"
+        import re
+        bed_match = re.search(r"remind me to sleep at (\d{1,2}(?::\d{2})?\s*(?:am|pm)?)", lower)
+        if bed_match:
+            time_raw = bed_match.group(1).strip()
+            # Convert to HH:MM
+            return f"I've updated your sleep reminder, {user}. I'll remind you at {time_raw}."
+
+        if any(w in lower for w in ("snooze bedtime", "snooze sleep reminder")):
+            self.time_engine.snooze(self.config.bedtime, minutes=30)
+            return f"Bedtime reminder snoozed for 30 minutes, {user}. Please make sure you wrap up soon!"
+
+        # 8. Tool intents: run tests, tasks, web search
+        if any(w in lower for w in ("run tests", "run pytest", "test the project")):
             res = self.tools.run_tests()
-            status = "All tests passed successfully!" if res["success"] else "Some tests failed da."
-            return f"{pref}, I ran the tests for you. {status}\n{res['output'][:200]}"
+            status = "All tests passed successfully!" if res["success"] else "Some tests failed."
+            return f"{user}, I ran the tests for you. {status}\n{res['output'][:200]}"
 
-        # Search web
         if lower.startswith("search web") or lower.startswith("google ") or "search online for" in lower:
             query = text.replace("search web", "").replace("google", "").replace("search online for", "").strip()
             if query:
                 web_res = self.tools.search_web(query)
-                return f"{pref}, here is what I found on the web for '{query}':\n{web_res}"
+                return f"{user}, here is what I found on the web for '{query}':\n{web_res}"
 
-        # List tasks
         if any(w in lower for w in ("what are my tasks", "list tasks", "my todo list")):
             tasks = self.tools.list_tasks()
             if not tasks:
-                return f"You don't have any pending tasks right now, {pref}! Relax or tell me what to add."
+                return f"You don't have any pending tasks right now, {user}!"
             items = ", ".join(t["title"] for t in tasks[:4])
-            return f"{pref}, here are your pending tasks: {items}."
+            return f"{user}, here are your pending tasks: {items}."
 
         return None
 
@@ -317,5 +437,8 @@ class CompanionSupervisor:
         if self.on_message_cb:
             self.on_message_cb(self.config.personality.name, reply)
 
-        if self.config.voice_enabled and self.state.active_mode != CompanionMode.PRIVACY:
-            self.voice.speak_async(reply)
+        if self.config.voice_enabled and not self.state.is_muted and self.state.active_mode != CompanionMode.PRIVACY:
+            self.state.current_lifecycle = CompanionLifecycleState.SPEAKING
+            self.voice.speak_async(reply, on_finish_cb=self._on_speech_finished)
+        else:
+            self.state.current_lifecycle = CompanionLifecycleState.READY

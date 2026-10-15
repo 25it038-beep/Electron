@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from datetime import datetime
 import io
 import json
 import logging
@@ -12,6 +13,7 @@ import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
 from electorn.companion.schema import ScreenObservationConfig, ScreenObservationReport
+from electorn.companion.time_engine import TimeAwarenessEngine
 
 try:
     import pytesseract
@@ -23,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class VisionAnalyzer:
-    """Interprets screen captures to extract errors, terminal commands, and active code context."""
+    """Interprets screen captures to extract errors, terminal commands, active code context, and visible clock."""
 
     def __init__(
         self,
@@ -32,6 +34,7 @@ class VisionAnalyzer:
     ) -> None:
         self.config = config or ScreenObservationConfig()
         self.ollama_base_url = ollama_base_url.rstrip("/")
+        self.time_engine = TimeAwarenessEngine()
 
     def sanitize_untrusted_screen_text(self, text: str) -> str:
         """Neutralize prompt injection attempts embedded in observed screen text."""
@@ -87,7 +90,6 @@ class VisionAnalyzer:
         vision_success = False
         try:
             buffered = io.BytesIO()
-            # Resize image to reasonable dimension (max 1024 width) to reduce latency and VRAM
             img_copy = image.copy()
             img_copy.thumbnail((1024, 768))
             img_copy.save(buffered, format="JPEG", quality=80)
@@ -95,7 +97,7 @@ class VisionAnalyzer:
 
             prompt = (
                 "You are an assistant inspecting the user's active screen. "
-                "Briefly summarize what code, document, or terminal commands are visible in 1-2 concise sentences. "
+                "Briefly summarize what code, document, learning material, or terminal commands are visible in 1-2 concise sentences. "
                 "If there is any visible error message, syntax failure, or exception, explicitly prefix it with 'ERROR: '. "
                 "Do not invent anything not clearly shown in the image."
             )
@@ -133,18 +135,26 @@ class VisionAnalyzer:
             logger.debug("Ollama vision analysis fell back: %s", e)
             vision_success = False
 
-        # 2. Fallback to OCR text extraction + heuristics if vision model was unavailable
-        if not vision_success and self.config.ocr_enabled and OCR_AVAILABLE:
+        # 2. OCR text extraction & clock comparison
+        if self.config.ocr_enabled and OCR_AVAILABLE:
             try:
                 ocr_text = pytesseract.image_to_string(image)
                 if ocr_text.strip():
                     sanitized_ocr = self.sanitize_untrusted_screen_text(ocr_text)
+
+                    # Extract visible clock and compare with system clock
+                    clock_str, discrepancy = self.time_engine.compare_ocr_clock(sanitized_ocr)
+                    if clock_str:
+                        report.visible_clock_time = clock_str
+                        report.clock_discrepancy = discrepancy
+
                     err = self.extract_error_heuristics(sanitized_ocr)
                     if err:
                         report.visible_error = err
-                        report.visible_summary = f"Detected error in {report.window_title}."
-                        report.suggested_assistance = f"Would you like me to inspect and help resolve: {err}?"
-                    else:
+                        if not vision_success:
+                            report.visible_summary = f"Detected error in {report.window_title}."
+                            report.suggested_assistance = f"Would you like me to inspect and help resolve: {err}?"
+                    elif not vision_success:
                         report.visible_summary = f"Working in {report.window_title} ({report.app_category})."
             except Exception as e:
                 logger.debug("OCR fallback exception: %s", e)
