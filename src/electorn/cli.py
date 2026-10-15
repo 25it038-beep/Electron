@@ -65,6 +65,10 @@ app = typer.Typer(
 )
 console = Console(legacy_windows=False)
 
+# Register Personal Communication Assistant
+from electorn.assistant.cli import assistant_app
+app.add_typer(assistant_app)
+
 
 from electorn.audio import play_intro_audio
 
@@ -111,11 +115,12 @@ def default_callback(ctx: typer.Context) -> None:
         console.print("  [bold cyan]3.[/bold cyan] 🎙️ [bold white]Hands-Free Voice Assistant[/bold white] — Speak with your mic & hear responses spoken aloud")
         console.print("  [bold yellow]4.[/bold yellow] 🩺 [bold white]System Doctor[/bold white] — Audit developer runtimes, Ollama engine & models")
         console.print("  [bold blue]5.[/bold blue] 🌐 [bold white]HS AI Solutions Studio[/bold white] — Explore the product suite (Pendulum, Lumina, Ledger, HS CODE)")
+        console.print("  [bold magenta]6.[/bold magenta] 📬 [bold white]Personal Communication Assistant[/bold white] — Email, WhatsApp, Files, Calls & Tasks")
         console.print("  [bold red]0.[/bold red] ❌ [bold white]Exit[/bold white]\n")
 
         choice = Prompt.ask(
             "[bold cyan]Select an option[/bold cyan]",
-            choices=["1", "2", "3", "4", "5", "0"],
+            choices=["1", "2", "3", "4", "5", "6", "0"],
             default="1",
         )
 
@@ -131,6 +136,9 @@ def default_callback(ctx: typer.Context) -> None:
             doctor_command(workspace=Path("."))
         elif choice == "5":
             studio_command()
+        elif choice == "6":
+            from electorn.assistant.cli import status_cmd
+            status_cmd()
         else:
             console.print("\n[yellow]Exiting Electorn AI. Goodbye![/yellow]")
 
