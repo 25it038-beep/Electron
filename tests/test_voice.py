@@ -274,3 +274,78 @@ def test_detect_web_search_intent_tamil():
     assert is_search is False
 
 
+def test_should_ground_in_real_data_english():
+    """Verify factual and informational questions are routed to real-world live grounding."""
+    from electorn.voice import should_ground_in_real_data
+
+    # Real-world factual questions should trigger grounding
+    ground, q = should_ground_in_real_data("who is the prime minister of UK")
+    assert ground is True
+    assert "prime minister" in q
+
+    ground, q = should_ground_in_real_data("what is the latest stock price of Apple")
+    assert ground is True
+
+    ground, q = should_ground_in_real_data("how is bitcoin trading today")
+    assert ground is True
+
+    ground, q = should_ground_in_real_data("tell me about the 2026 economic forecast")
+    assert ground is True
+
+    # OS actions should NOT trigger grounding
+    ground, _ = should_ground_in_real_data("click")
+    assert ground is False
+    ground, _ = should_ground_in_real_data("open notepad")
+    assert ground is False
+    ground, _ = should_ground_in_real_data("type hello")
+    assert ground is False
+
+    # Meta/pleasantries should NOT trigger grounding
+    ground, _ = should_ground_in_real_data("hello")
+    assert ground is False
+    ground, _ = should_ground_in_real_data("how are you")
+    assert ground is False
+    ground, _ = should_ground_in_real_data("switch to tamil")
+    assert ground is False
+
+
+def test_should_ground_in_real_data_tamil():
+    """Verify Tamil informational questions trigger real-world live grounding."""
+    from electorn.voice import should_ground_in_real_data
+
+    ground, q = should_ground_in_real_data("சென்னை வானிலை நிலவரம் என்ன")
+    assert ground is True
+
+    ground, q = should_ground_in_real_data("இன்றைய தங்கம் விலை என்ன")
+    assert ground is True
+
+    ground, q = should_ground_in_real_data("நரேந்திர மோடி பற்றி சொல்")
+    assert ground is True
+
+    # Greeting should not ground
+    ground, _ = should_ground_in_real_data("வணக்கம்")
+    assert ground is False
+
+
+def test_build_real_data_context():
+    """Verify build_real_data_context embeds date, year, and anti-cutoff directives."""
+    from electorn.voice import build_real_data_context
+    from electorn.runtime.web_search import SearchResult
+
+    results = [
+        SearchResult(title="Live News 2026", url="https://news.org", snippet="Current events verified.")
+    ]
+
+    en_ctx = build_real_data_context("latest tech news", results, language="en-US")
+    assert "REAL-TIME LIVE DATA CONTEXT" in en_ctx
+    assert "CRITICAL MODEL DATA CUTOFF OVERRIDE" in en_ctx
+    assert "2026" in en_ctx
+    assert "Live News 2026" in en_ctx
+
+    ta_ctx = build_real_data_context("செய்திகள்", results, language="ta-IN")
+    assert "நிகழ்நேர நேரடித் தரவுகள்" in ta_ctx
+    assert "2026" in ta_ctx
+    assert "Live News 2026" in ta_ctx
+
+
+

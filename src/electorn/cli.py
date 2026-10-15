@@ -32,7 +32,12 @@ from electorn.verification.quality_report import ExecutedCheck, QualityReport
 from electorn.workspace.checkpoints import CheckpointManager
 from electorn.workspace.file_manager import FileOperationResult
 from electorn.workspace.project_state import ProjectState
-from electorn.voice import VoiceEngine, detect_web_search_intent
+from electorn.voice import (
+    VoiceEngine,
+    detect_web_search_intent,
+    should_ground_in_real_data,
+    build_real_data_context,
+)
 from electorn.automation import AutomationEngine
 
 
@@ -1326,9 +1331,18 @@ def chat_command(
                     results = web_searcher.search(effective_query, max_results=4)
                 if results:
                     console.print(web_searcher.format_table(effective_query, results))
-                    web_context_prompt = web_searcher.format_context_prompt(effective_query, results)
+                    web_context_prompt = build_real_data_context(effective_query, results, language="en-US")
                 else:
                     console.print(f"[dim]No external web results returned; consulting internal knowledge.[/dim]")
+            elif not user_input.startswith("/"):
+                # Autonomous Real-Data Grounding for factual/real-world queries
+                should_ground, ground_query = should_ground_in_real_data(user_input)
+                if should_ground and ground_query:
+                    with console.status(f"[cyan]🌐 Grounding in live real-world data for: \"{ground_query}\"...[/cyan]", spinner="earth"):
+                        results = web_searcher.search(ground_query, max_results=3)
+                    if results:
+                        console.print(web_searcher.format_table(ground_query, results))
+                        web_context_prompt = build_real_data_context(ground_query, results, language="en-US")
 
             if user_input.lower().startswith("/build "):
                 build_prompt = user_input[7:].strip()
@@ -1341,9 +1355,14 @@ def chat_command(
             if len(conversation_history) > 8:
                 conversation_history = conversation_history[-8:]
 
-            # Conversational Chat System Prompt Override
+            # Conversational Chat System Prompt Override with Temporal Anchor
+            from datetime import datetime
+            now_str = datetime.now().strftime("%B %d, %Y")
             chat_system = (
                 f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Studio. "
+                f"Operating Date: {now_str} (Year: {datetime.now().year}). "
+                f"CRITICAL REAL-WORLD INSTRUCTION: Your pre-trained weights have an outdated historical cutoff (2023/2024). "
+                f"Never present outdated historical facts as current status. Prioritize live real-world data provided in context. "
                 f"You are in interactive chat mode. Greet the user naturally, answer questions conversationally and helpfully. "
                 f"Only write code snippets or files if the user explicitly asks you to write, design, or generate code."
             )
@@ -1589,10 +1608,10 @@ def voice_command(
                 console.print("[dim cyan]🎙️ Listening for next command...[/dim cyan]")
                 continue
 
-            # Live Web Search Intent Check
-            is_search, search_q = detect_web_search_intent(query) if search_engine else (False, "")
-            if is_search and search_q:
-                console.print(f"🌐 [bold cyan][LIVE WEB SEARCH][/bold cyan] Searching for: [bold white]'{search_q}'[/bold white]...")
+            # Real-Time Data Grounding & Live Web Search Intent Check
+            should_ground, search_q = should_ground_in_real_data(query) if search_engine else (False, "")
+            if should_ground and search_q:
+                console.print(f"🌐 [bold cyan][REAL-TIME DATA GROUNDING][/bold cyan] Querying live sources for: [bold white]'{search_q}'[/bold white]...")
 
                 # Open in browser if user asked specifically for browser
                 if any(phrase in lower_q for phrase in ["open in browser", "open google for", "open browser for", "browser search"]):
@@ -1601,63 +1620,72 @@ def voice_command(
                     except Exception:
                         pass
 
-                with console.status("[cyan]Fetching live web search results...[/cyan]", spinner="earth"):
+                with console.status("[cyan]Fetching live real-world data...[/cyan]", spinner="earth"):
                     results = search_engine.search(search_q, max_results=3)
+
+                is_ta = (voice.language == "ta-IN" or voice.is_tamil_text(query))
+                lang_code = "ta-IN" if is_ta else "en-US"
 
                 if results:
                     console.print(search_engine.format_table(search_q, results))
-                    context_str = search_engine.format_context_prompt(search_q, results)
+                    context_str = build_real_data_context(search_q, results, language=lang_code)
+                else:
+                    from datetime import datetime
+                    now_str = datetime.now().strftime("%B %d, %Y")
+                    context_str = (
+                        f"[REAL-WORLD TEMPORAL ANCHOR: Today is {now_str}, Year {datetime.now().year}]\n"
+                        f"NOTE: Training weights cutoff is historical (2023/2024). Do not assume outdated facts are true for {datetime.now().year}.\n"
+                    )
 
-                    is_ta = (voice.language == "ta-IN" or voice.is_tamil_text(query))
-                    if is_ta:
-                        chat_system = (
-                            f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Voice Assistant mode. "
-                            f"You have live, verified web search results below. Answer the user's question accurately, "
-                            f"factually, and concisely in 2-3 sentences in clear, polite, natural Tamil (தமிழ்). "
-                            f"Do not read raw URLs or markup aloud.\n\n{context_str}"
-                        )
-                    else:
-                        chat_system = (
-                            f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Voice Assistant mode. "
-                            f"You have live, verified web search results below. Answer the user's question accurately, "
-                            f"factually, and concisely in 2-3 sentences based on the live web search data. "
-                            f"Do not read raw URLs or markup aloud.\n\n{context_str}"
-                        )
+                if is_ta:
+                    chat_system = (
+                        f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Voice Assistant mode.\n"
+                        f"{context_str}\n"
+                        f"CRITICAL DIRECTIVE: Base your response exclusively on the live real-world data above, NOT on outdated training data. "
+                        f"Respond concisely in 2-3 clear, natural spoken Tamil (தமிழ்) sentences. Do not read raw URLs aloud."
+                    )
+                else:
+                    chat_system = (
+                        f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Voice Assistant mode.\n"
+                        f"{context_str}\n"
+                        f"CRITICAL DIRECTIVE: Base your response exclusively on the live real-world data above, NOT on outdated training data. "
+                        f"Respond concisely in 2-3 clear, natural spoken sentences. Do not read raw URLs aloud."
+                    )
 
-                    streamed_chunks: list[str] = []
-                    console.print(f"\n🧠 [bold yellow]{current_agent.name}[/bold yellow] ❯ ", end="")
-                    try:
-                        with console.status("[cyan]Synthesizing live answer...[/cyan]", spinner="dots"):
-                            token_gen = current_agent.stream_ask(query, conversation_history[-4:] if conversation_history else [], system_override=chat_system)
-                            try:
-                                first_chunk = next(token_gen)
-                            except StopIteration:
-                                first_chunk = ""
+                streamed_chunks: list[str] = []
+                console.print(f"\n🧠 [bold yellow]{current_agent.name}[/bold yellow] ❯ ", end="")
+                try:
+                    with console.status("[cyan]Synthesizing live answer...[/cyan]", spinner="dots"):
+                        token_gen = current_agent.stream_ask(query, conversation_history[-4:] if conversation_history else [], system_override=chat_system)
+                        try:
+                            first_chunk = next(token_gen)
+                        except StopIteration:
+                            first_chunk = ""
 
-                        if first_chunk:
-                            console.print(first_chunk, end="", highlight=False)
-                            streamed_chunks.append(first_chunk)
+                    if first_chunk:
+                        console.print(first_chunk, end="", highlight=False)
+                        streamed_chunks.append(first_chunk)
 
-                        for chunk in token_gen:
-                            console.print(chunk, end="", highlight=False)
-                            streamed_chunks.append(chunk)
-                            if hasattr(sys.stdout, "flush"):
-                                sys.stdout.flush()
-                    except Exception:
-                        resp = current_agent.ask(f"{chat_system}\n\nUser Question: {query}")
-                        console.print(resp.content, end="")
-                        streamed_chunks = [resp.content]
+                    for chunk in token_gen:
+                        console.print(chunk, end="", highlight=False)
+                        streamed_chunks.append(chunk)
+                        if hasattr(sys.stdout, "flush"):
+                            sys.stdout.flush()
+                except Exception:
+                    resp = current_agent.ask(f"{chat_system}\n\nUser Question: {query}")
+                    console.print(resp.content, end="")
+                    streamed_chunks = [resp.content]
 
-                    full_text = "".join(streamed_chunks).strip()
-                    console.print("\n")
+                full_text = "".join(streamed_chunks).strip()
+                console.print("\n")
 
-                    if full_text:
-                        conversation_history.append({"role": "user", "content": query})
-                        conversation_history.append({"role": "assistant", "content": full_text})
-                        voice.speak(full_text, async_mode=False)
+                if full_text:
+                    conversation_history.append({"role": "user", "content": query})
+                    conversation_history.append({"role": "assistant", "content": full_text})
+                    voice.speak(full_text, async_mode=False)
 
-                    console.print("[dim cyan]🎙️ Listening for next command...[/dim cyan]")
-                    continue
+                console.print("[dim cyan]🎙️ Listening for next command...[/dim cyan]")
+                continue
 
             # Autonomous Intent Check: Selenium Browser Automation & OS Control
             auto_res = automation.execute_intent(query)
@@ -1679,19 +1707,24 @@ def voice_command(
             if len(conversation_history) > 8:
                 conversation_history = conversation_history[-8:]
 
+            from datetime import datetime
+            now_str = datetime.now().strftime("%B %d, %Y")
             is_ta = (voice.language == "ta-IN" or voice.is_tamil_text(query))
             if is_ta:
                 chat_system = (
                     f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Voice Assistant mode. "
+                    f"Operating Date: {now_str} (Year: {datetime.now().year}). "
+                    f"CRITICAL: Your training cutoff is 2023/2024. Do not assume historical facts are current. "
                     f"You are assisting a hands-free user who speaks Tamil (தமிழ்). "
                     f"Be exceptionally helpful, clear, and polite. Respond concisely in 2-3 sentences in natural Tamil (தமிழ்)."
                 )
             else:
                 chat_system = (
                     f"You are {current_agent.name} ({current_agent.role}) in Electorn AI Voice Assistant mode. "
+                    f"Operating Date: {now_str} (Year: {datetime.now().year}). "
+                    f"CRITICAL: Your training cutoff is 2023/2024. Do not assume historical facts are current. "
                     f"You are assisting a hands-free user who cannot use their hands or mouse/keyboard physically. "
-                    f"Be exceptionally helpful, clear, and proactive. Keep verbal replies concise and direct (2-3 sentences). "
-                    f"If the user asks to perform an action on the computer that you can guide or perform, inform them clearly."
+                    f"Be exceptionally helpful, clear, and proactive. Keep verbal replies concise and direct (2-3 sentences)."
                 )
 
             streamed_chunks: list[str] = []

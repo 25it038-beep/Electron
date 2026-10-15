@@ -35,8 +35,15 @@ class BaseAgent:
         self.temperature = temperature
 
     def _build_system_prompt(self) -> str:
-        """Inject small-model instructions and role constraints."""
-        prefix = f"You are the {self.name} ({self.role}) in an autonomous software development team.\n"
+        """Inject small-model instructions, real-world temporal context, and role constraints."""
+        from datetime import datetime
+        now_str = datetime.now().strftime("%B %d, %Y")
+        prefix = (
+            f"You are the {self.name} ({self.role}) in an autonomous software development team.\n"
+            f"Operating Date: {now_str} (Year: {datetime.now().year}). "
+            f"CRITICAL: Your training cutoff is historical (2023/2024). You are operating in {datetime.now().year}. "
+            f"Prioritize modern standards, contemporary versions, and verified real-world data.\n"
+        )
         if self.model_profile.tier == "small":
             # Direct, concise instructions for 1B-4B models
             constraint = (

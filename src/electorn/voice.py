@@ -397,3 +397,115 @@ def detect_web_search_intent(text: str) -> tuple[bool, str]:
 
     return False, ""
 
+
+def should_ground_in_real_data(text: str) -> tuple[bool, str]:
+    """Detect if a user query requires real-world live web data grounding instead of relying on outdated model training.
+
+    Returns (should_ground, search_query).
+    """
+    import re
+    raw = text.strip()
+    if not raw:
+        return False, ""
+    lower = raw.lower()
+
+    # 1. First check explicit web search intent
+    is_search, search_q = detect_web_search_intent(raw)
+    if is_search:
+        return True, search_q
+
+    # 2. Exclude local OS automation commands (mouse, keyboard, window control, app launching)
+    automation_commands = [
+        "click", "double click", "right click", "move cursor", "move mouse",
+        "type ", "press enter", "press space", "press tab", "select all",
+        "copy", "paste", "cut", "undo", "redo", "save",
+        "open notepad", "open chrome", "open calc", "open terminal",
+        "close notepad", "close browser", "close window", "minimize", "maximize",
+        "switch window", "volume up", "volume down", "play music", "next song",
+        "lock pc", "lock computer", "system info",
+    ]
+    if any(lower == cmd or lower.startswith(cmd + " ") or lower.startswith("press " + cmd) for cmd in automation_commands):
+        return False, ""
+
+    # Exclude basic conversational pleasantries and system commands
+    meta_phrases = [
+        "exit", "quit", "stop", "bye", "goodbye",
+        "hello", "hi", "hey", "how are you", "who are you", "what can you do", "help",
+        "switch to tamil", "switch to english", "change to tamil", "change to english",
+        "தமிழுக்கு மாறு", "வணக்கம்", "நலமா", "வெளியேறு", "நிறுத்து",
+    ]
+    if any(lower == p or lower == p + "." for p in meta_phrases):
+        return False, ""
+
+    # 3. Informational question patterns (English)
+    question_starts = [
+        "who ", "who's ", "what ", "what's ", "when ", "when's ",
+        "where ", "where's ", "why ", "how ", "how's ",
+        "is ", "was ", "are ", "were ", "did ", "does ", "will ",
+        "tell me about ", "tell me ", "explain ", "give me details on ",
+        "information about ", "info on ",
+    ]
+    if any(lower.startswith(q) for q in question_starts) or lower.endswith("?"):
+        return True, raw
+
+    # Real-world temporal/entity keywords (English)
+    entity_keywords = [
+        "latest", "current", "recent", "today", "yesterday", "tomorrow", "now",
+        "news", "weather", "price", "stock", "market", "ceo", "president",
+        "prime minister", "minister", "election", "score", "winner", "released",
+        "release date", "version", "update", "population", "gdp", "inflation",
+        "2024", "2025", "2026",
+    ]
+    if any(re.search(r"\b" + re.escape(w) + r"\b", lower) for w in entity_keywords):
+        return True, raw
+
+    # 4. Tamil question & real-world patterns
+    tamil_q_patterns = [
+        r"யார்", r"என்ன", r"எங்கே", r"எப்போது", r"எப்படி",
+        r"பற்றி\s+சொல்", r"விவரம்", r"செய்தி", r"வானிலை",
+        r"விலை", r"நிலவரம்", r"தகவல்", r"இன்று", r"நேற்று",
+        r"தற்போது", r"அரசியல்", r"அமைச்சர்", r"தலைவர்",
+    ]
+    if any(re.search(p, raw) for p in tamil_q_patterns):
+        return True, raw
+
+    return False, ""
+
+
+def build_real_data_context(query: str, results: list, language: str = "en-US") -> str:
+    """Build prompt context with live real-world date anchor and anti-cutoff directives."""
+    from datetime import datetime
+    now_str = datetime.now().strftime("%B %d, %Y")
+    year_str = str(datetime.now().year)
+
+    if language == "ta-IN":
+        lines = [
+            f"[நிகழ்நேர நேரடித் தரவுகள் — இன்றைய தேதி: {now_str}]",
+            f"தற்போதைய ஆண்டு: {year_str}",
+            "முக்கியக் குறிப்பு: உங்கள் பழைய பயிற்சித் தரவுகள் காலாவதியானவை (2023/2024 cutoff). நீங்கள் 2026-இல் இயங்குகிறீர்கள். "
+            "கீழே உள்ள சரிபார்க்கப்பட்ட நேரடி இணையத் தேடல் முடிவுகளை மட்டுமே முதன்மையாகக் கொண்டு "
+            "உண்மைத் தகவல்களை 2-3 வரிகளில் துல்லியமாகத் தமிழில் கூறவும். பழைய காலாவதியான நினைவுகளைத் தவிர்க்கவும்.",
+            "",
+            f"[இணைய தேடல் முடிவுகள்: '{query}']",
+        ]
+        for idx, r in enumerate(results, 1):
+            lines.append(f"{idx}. {r.title} ({r.url})")
+            lines.append(f"   விவரம்: {r.snippet}")
+        lines.append("[நேரடித் தரவுகள் முடிவு]\n")
+        return "\n".join(lines)
+    else:
+        lines = [
+            f"[REAL-TIME LIVE DATA CONTEXT — CURRENT DATE: {now_str}]",
+            f"Current Year: {year_str}",
+            f"CRITICAL MODEL DATA CUTOFF OVERRIDE: Your internal pre-trained weights have an outdated cutoff (2023/2024). You are operating live in {year_str}. "
+            f"NEVER assume outdated historical knowledge represents the current state. Always prioritize the verified real-time live web search results below over outdated pre-training memory.",
+            "",
+            f"[VERIFIED LIVE WEB SEARCH RESULTS FOR: '{query}']",
+        ]
+        for idx, r in enumerate(results, 1):
+            lines.append(f"{idx}. {r.title} ({r.url})")
+            lines.append(f"   Summary: {r.snippet}")
+        lines.append("[END OF LIVE DATA CONTEXT]\n")
+        return "\n".join(lines)
+
+
