@@ -60,11 +60,12 @@ class MemoryEngine:
         """Add or update a memory record."""
         items = self.load_all()
         # Deduplicate or update existing item with identical key and category
+        sanitized_value = self.sanitize_secret(value.strip())
         clean_key = key.strip().lower()
         existing = next((i for i in items if i.category == category and i.key.strip().lower() == clean_key), None)
 
         if existing:
-            existing.value = value.strip()
+            existing.value = sanitized_value
             existing.timestamp = time.time()
             existing.confidence = confidence
             existing.source = source
@@ -76,7 +77,7 @@ class MemoryEngine:
             timestamp=time.time(),
             category=category,
             key=key.strip(),
-            value=value.strip(),
+            value=sanitized_value,
             confidence=confidence,
             source=source,
         )
@@ -96,6 +97,57 @@ class MemoryEngine:
         q = query.strip().lower()
         items = self.load_all()
         return [i for i in items if q in i.key.lower() or q in i.value.lower()]
+
+    @staticmethod
+    def sanitize_secret(text: str) -> str:
+        """Strip passwords, API keys, and sensitive tokens from persisted memory."""
+        patterns = [
+            r"\b(?:sk-[a-zA-Z0-9_\-]{20,})\b",
+            r"\b(?:ghp_[a-zA-Z0-9]{36,})\b",
+            r"\b(?:bearer\s+[a-zA-Z0-9_\-\.]{20,})\b",
+            r"(?:password|passwd|pwd)\s*[:=]\s*\S+",
+        ]
+        sanitized = text
+        for pat in patterns:
+            sanitized = re.sub(pat, "[REDACTED_SECRET]", sanitized, flags=re.IGNORECASE)
+        return sanitized
+
+    def export_memories(self, fmt: str = "markdown") -> str:
+        """Export structured persistent memory records in Markdown or JSON format."""
+        items = self.load_all()
+        if fmt.lower() == "json":
+            return json.dumps([item.model_dump() for item in items], indent=2)
+
+        lines = [
+            "# Electorn AI Companion — Persistent Memory Export",
+            f"\n**Total Records:** {len(items)} items",
+            "**Generated:** " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+            "\n---",
+        ]
+        categories: Dict[str, List[CompanionMemoryItem]] = {}
+        for item in items:
+            cat = item.category.value if hasattr(item.category, "value") else str(item.category)
+            categories.setdefault(cat, []).append(item)
+
+        for cat, records in sorted(categories.items()):
+            lines.append(f"\n### {cat.replace('_', ' ').title()} ({len(records)})")
+            for r in records:
+                lines.append(f"- **{r.key}**: {r.value} *(Confidence: {r.confidence:.1f})*")
+
+        return "\n".join(lines)
+
+    def delete_by_key(self, key: str, category: Optional[MemoryCategory] = None) -> bool:
+        """Delete memories matching a specific key."""
+        items = self.load_all()
+        k_clean = key.strip().lower()
+        filtered = [
+            i for i in items
+            if not (i.key.strip().lower() == k_clean and (category is None or i.category == category))
+        ]
+        if len(filtered) < len(items):
+            self._save_all(filtered)
+            return True
+        return False
 
     def delete_memory(self, memory_id: str) -> bool:
         """Delete a memory record by ID."""

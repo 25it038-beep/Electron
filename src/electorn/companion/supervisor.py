@@ -20,6 +20,9 @@ from electorn.companion.schema import (
     ProactiveEvent,
     ScreenObservationReport,
 )
+from electorn.automation.os_agent import WindowsOSAgent
+from electorn.automation.web_agent import PlaywrightWebAgent
+from electorn.companion.boredom_engine import BoredomEngine
 from electorn.companion.screen_observer import ScreenObservationEngine
 from electorn.companion.startup import StartupManager
 from electorn.companion.storage import CompanionStorage
@@ -27,6 +30,7 @@ from electorn.companion.time_engine import TimeAwarenessEngine
 from electorn.companion.tools import CompanionTools
 from electorn.companion.vision_analyzer import VisionAnalyzer
 from electorn.companion.voice_session import CompanionVoiceSession
+from electorn.planner.task_planner import AutonomousTaskPlanner
 from electorn.providers.local_llm import OllamaLocalProvider
 
 logger = logging.getLogger(__name__)
@@ -54,6 +58,10 @@ class CompanionSupervisor:
         self.vision_analyzer = VisionAnalyzer(self.config.screen)
         self.scheduler = ProactiveScheduler(self.config, self.state)
         self.tools = CompanionTools()
+        self.os_agent = WindowsOSAgent()
+        self.web_agent = PlaywrightWebAgent()
+        self.boredom_engine = BoredomEngine(self.config.storage_directory)
+        self.task_planner = AutonomousTaskPlanner(llm_provider=llm_provider)
         self.voice = CompanionVoiceSession(
             language=self.config.personality.language,
             voice_gender=self.config.personality.voice_gender,
@@ -442,6 +450,65 @@ class CompanionSupervisor:
                 return f"You don't have any pending tasks right now, {user}!"
             items = ", ".join(t["title"] for t in tasks[:4])
             return f"{user}, here are your pending tasks: {items}."
+
+        # 9. Boredom & entertainment
+        if any(w in lower for w in ("i'm bored", "im bored", "entertain me", "give me something fun", "play a game", "start a quiz", "tech trivia", "trivia quiz", "coding puzzle", "startup idea")):
+            boredom_res = self.boredom_engine.handle_boredom_trigger(lower, user_name=user)
+            return boredom_res["message"]
+
+        # 10. OS Automation: Open/Launch application
+        if lower.startswith("open ") or lower.startswith("launch ") or lower.startswith("start app "):
+            app_target = lower.replace("start app ", "").replace("launch ", "").replace("open ", "").strip()
+            if app_target and len(app_target.split()) <= 3 and not any(w in app_target for w in ("tab", "search", "link", "url")):
+                res = self.os_agent.launch_application(app_target)
+                if res.get("success"):
+                    return f"I launched {app_target} for you, {user}."
+                return f"I tried to launch {app_target}, but ran into an issue: {res.get('error', 'could not start')}."
+
+        # 11. OS Automation: Close application
+        if lower.startswith("close ") or lower.startswith("kill app "):
+            app_target = lower.replace("kill app ", "").replace("close ", "").strip()
+            if app_target and len(app_target.split()) <= 3:
+                res = self.os_agent.close_application(app_target)
+                if res.get("success"):
+                    return f"Closed {app_target} for you, {user}."
+                return f"Could not close {app_target}: {res.get('error', 'process not found')}."
+
+        # 12. OS Automation: Organize Downloads / Directory
+        if any(w in lower for w in ("organize my downloads", "organize downloads", "clean downloads", "sort my downloads", "organize folder", "clean folder")):
+            res = self.os_agent.organize_directory()
+            if res.get("success"):
+                moved = res.get("files_moved", 0)
+                cats = ", ".join(f"{k}: {v}" for k, v in res.get("summary", {}).items() if v > 0)
+                return f"I've organized your Downloads folder, {user}! Moved {moved} files ({cats or 'none needed moving'})."
+            return f"Directory organization status: {res.get('error', 'unknown error')}."
+
+        # 13. System Diagnostics & Specs
+        if any(w in lower for w in ("system specs", "disk space", "system health", "diagnostics", "check system specs", "pc specs", "memory usage")):
+            diag = self.os_agent.get_system_diagnostics()
+            cpu_p = diag.get("cpu", {}).get("percent", 0)
+            mem_p = diag.get("memory", {}).get("percent", 0)
+            mem_avail = diag.get("memory", {}).get("available_gb", 0)
+            battery = diag.get("battery", {})
+            bat_str = f", Battery at {battery.get('percent')}%" if battery and battery.get("percent") is not None else ""
+            return f"{user}, here are your current system specs: CPU load is {cpu_p}%, RAM usage is {mem_p}% ({mem_avail} GB free){bat_str}. All systems operating normally."
+
+        # 14. Deep Autonomous Web Research
+        if lower.startswith("deep research ") or lower.startswith("research ") or lower.startswith("investigate "):
+            topic = lower.replace("deep research ", "").replace("research ", "").replace("investigate ", "").strip()
+            if topic:
+                rep = self.web_agent.research_topic(topic, max_sources=3)
+                if rep.get("success"):
+                    return f"{user}, I conducted autonomous research on '{topic}'. {rep.get('summary', '')} Full report saved to {rep.get('report_path')}."
+                return f"I encountered an issue researching '{topic}': {rep.get('error')}."
+
+        # 15. Autonomous Task Planner
+        if lower.startswith("automate task ") or lower.startswith("plan and execute "):
+            goal = lower.replace("automate task ", "").replace("plan and execute ", "").strip()
+            if goal:
+                task_res = self.task_planner.plan_and_execute(goal)
+                status = "successfully completed" if task_res.get("success") else "failed during execution"
+                return f"{user}, autonomous task '{goal}' {status}. {task_res.get('report', '')}"
 
         return None
 

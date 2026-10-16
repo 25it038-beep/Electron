@@ -200,6 +200,9 @@ class MemoryCategory(str, Enum):
     OBSERVED_WORK_STYLE = "observed_work_style"
     TASK_COMMITMENT = "task_commitment"
     STUDY_SESSION = "study_session"
+    WORKFLOW_HISTORY = "workflow_history"
+    ENTERTAINMENT_FEEDBACK = "entertainment_feedback"
+    DISCOVERED_INSIGHT = "discovered_insight"
 
 
 class CompanionMemoryItem(BaseModel):

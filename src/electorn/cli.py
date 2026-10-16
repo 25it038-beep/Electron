@@ -155,11 +155,15 @@ def default_callback(ctx: typer.Context) -> None:
         console.print("  [bold magenta]6.[/bold magenta] 📬 [bold white]Personal Communication Assistant[/bold white] — Email, WhatsApp, Files, Calls & Tasks")
         console.print("  [bold magenta]7.[/bold magenta] 💖 [bold white]AI Companion Mode[/bold white] — Voice-enabled, screen-aware girlfriend persona (Aria)")
         console.print("  [bold magenta]8.[/bold magenta] 💖 📹 [bold white]AI Companion Video Call[/bold white] — 3D Animated Avatar, Web Audio Lip-Sync & Camera Vision")
+        console.print("  [bold cyan]9.[/bold cyan] 🧠 [bold white]Autonomous Task Planner[/bold white] — 4-Stage Plan, Execute, Validate & Self-Repair")
+        console.print("  [bold cyan]10.[/bold cyan] 🌐 [bold white]Deep Web Research Agent[/bold white] — Autonomous multi-source research & synthesized reports")
+        console.print("  [bold green]11.[/bold green] 🎮 [bold white]Boredom & Discovery Engine[/bold white] — RPG Adventure, Tech Trivia, Coding Challenges & Ideas")
+        console.print("  [bold yellow]12.[/bold yellow] 🖥️ [bold white]Windows OS Automation[/bold white] — App manager, file organizer, diagnostics & PowerShell")
         console.print("  [bold red]0.[/bold red] ❌ [bold white]Exit[/bold white]\n")
 
         choice = Prompt.ask(
             "[bold cyan]Select an option[/bold cyan]",
-            choices=["1", "2", "3", "4", "5", "6", "7", "8", "0"],
+            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "0"],
             default="1",
         )
 
@@ -184,6 +188,18 @@ def default_callback(ctx: typer.Context) -> None:
         elif choice == "8":
             from electorn.companion.cli import call_cmd
             call_cmd(style=None, port=None, no_browser=False)
+        elif choice == "9":
+            task_goal = Prompt.ask("\n[bold cyan]Enter autonomous task goal to plan and execute[/bold cyan]")
+            if task_goal.strip():
+                task_command(goal=task_goal.strip())
+        elif choice == "10":
+            topic_str = Prompt.ask("\n[bold cyan]Enter topic to research deeply[/bold cyan]")
+            if topic_str.strip():
+                research_command(topic=topic_str.strip(), sources=4)
+        elif choice == "11":
+            bored_command()
+        elif choice == "12":
+            os_specs_cmd()
         else:
             console.print("\n[yellow]Exiting Electorn AI. Goodbye![/yellow]")
 
@@ -1993,6 +2009,335 @@ def ppt_command(
     if manifest_file.exists():
         console.print(f"  [dim]Manifest: {manifest_file.name}[/dim]")
     console.print("")
+
+
+# =============================================================================
+# ULTIMATE AUTONOMOUS AI COMPANION EXTENSIONS (TASK, OS, RESEARCH, BOREDOM, PLUGINS, MEMORY, IMPROVE)
+# =============================================================================
+
+@app.command(name="task", help="Execute an autonomous task using the 4-stage planner (Plan -> Execute -> Validate -> Report).")
+def task_command(goal: str = typer.Argument(..., help="High-level task or workflow to execute")) -> None:
+    """Execute an autonomous task using the 4-stage planner."""
+    from electorn.planner.task_planner import AutonomousTaskPlanner
+    planner = AutonomousTaskPlanner()
+    console.print(f"[bold cyan]🧠 Autonomous Task Planner[/bold cyan]: '{goal}'")
+    with console.status("[bold cyan]Planning and executing autonomous stages...[/bold cyan]", spinner="dots"):
+        result = planner.plan_and_execute(goal)
+    if result.get("success"):
+        console.print(f"\n[bold green]✔ Task Execution Succeeded![/bold green]")
+    else:
+        console.print(f"\n[bold red]✖ Task Execution Finished with Issues[/bold red]")
+    console.print(Panel(result.get("report", ""), title="Execution Report", border_style="cyan"))
+
+
+@app.command(name="research", help="Deep autonomous web research agent synthesizing multi-source Markdown reports.")
+def research_command(
+    topic: str = typer.Argument(..., help="Topic or query to research"),
+    sources: int = typer.Option(4, "--sources", "-s", help="Maximum number of authoritative sources to synthesize"),
+) -> None:
+    """Deep autonomous web research agent synthesizing multi-source Markdown reports."""
+    from electorn.automation.web_agent import PlaywrightWebAgent
+    agent = PlaywrightWebAgent()
+    console.print(f"[bold cyan]🌐 Deep Autonomous Research Agent[/bold cyan]: '{topic}'")
+    with console.status("[bold cyan]Scraping authoritative sources and synthesizing report...[/bold cyan]", spinner="dots"):
+        res = agent.research_topic(topic, max_sources=sources)
+    if res.get("success"):
+        console.print(f"\n[bold green]✔ Research Complete![/bold green]")
+        console.print(f"Report saved to: [bold white]{res.get('report_path')}[/bold white]\n")
+        console.print(Panel(res.get("summary", ""), title=f"Research Summary: {topic}", border_style="green"))
+    else:
+        console.print(f"\n[bold red]✖ Research Failed:[/bold red] {res.get('error')}")
+
+
+@app.command(name="bored", help="Interactive boredom and discovery engine (trivia, RPG adventure, coding puzzles, startup ideas).")
+def bored_command() -> None:
+    """Interactive boredom and discovery engine."""
+    import random
+    from electorn.companion.boredom_engine import BoredomEngine
+    engine = BoredomEngine()
+    console.print("[bold magenta]🎮 Boredom & Discovery Engine — Electorn AI[/bold magenta]\n")
+    console.print("  [bold green]1.[/bold green] 🧠 Quick Tech & AI Trivia Quiz")
+    console.print("  [bold cyan]2.[/bold cyan] 🗡️ 'The Quantum Heist' Interactive Text RPG")
+    console.print("  [bold yellow]3.[/bold yellow] 💻 Bite-Sized Python Coding Challenge")
+    console.print("  [bold blue]4.[/bold blue] 💡 Autonomous AI Startup Brainstorm")
+    console.print("  [bold red]0.[/bold red] ❌ Return to main menu\n")
+
+    choice = Prompt.ask("[bold cyan]Choose an activity[/bold cyan]", choices=["1", "2", "3", "4", "0"], default="1")
+    if choice == "1":
+        trivia = engine.get_random_trivia()
+        console.print(f"\n[bold white]{trivia.question}[/bold white]\n")
+        for i, opt in enumerate(trivia.options):
+            console.print(f"  [bold cyan]{i+1}.[/bold cyan] {opt}")
+        ans = Prompt.ask("\n[bold green]Your answer [1-4][/bold green]", choices=["1", "2", "3", "4"])
+        eval_res = engine.evaluate_trivia_answer(trivia, int(ans) - 1)
+        if eval_res["is_correct"]:
+            console.print(f"\n[bold green]{eval_res['message']}[/bold green]")
+        else:
+            console.print(f"\n[bold yellow]{eval_res['message']}[/bold yellow]")
+        console.print(f"[dim]{eval_res['explanation']}[/dim]\n")
+    elif choice == "2":
+        node_id = "start"
+        console.print("\n[bold magenta]=== CYBERDYNE TOWER: THE QUANTUM HEIST ===[/bold magenta]\n")
+        while True:
+            node = engine.get_adventure_node(node_id)
+            console.print(f"\n{node['narrative']}\n")
+            if not node['options']:
+                break
+            for opt in node['options']:
+                console.print(f"  [bold cyan]{opt['choice']}.[/bold cyan] {opt['text']}")
+            console.print("  [bold red]0.[/bold red] Exit adventure")
+            opts = [opt['choice'] for opt in node['options']] + ["0"]
+            sel = Prompt.ask("\nAction", choices=opts)
+            if sel == "0":
+                break
+            chosen = next(o for o in node['options'] if o['choice'] == sel)
+            node_id = chosen['target']
+    elif choice == "3":
+        ch = engine.get_random_challenge()
+        console.print(f"\n[bold cyan]Challenge:[/bold cyan] [bold white]{ch.title}[/bold white] ({ch.difficulty.upper()})")
+        console.print(f"{ch.description}\n")
+        console.print(Panel(ch.starter_code, title="Starter Code", border_style="cyan"))
+        Prompt.ask("\nPress Enter to reveal hint & solution...")
+        console.print(f"[bold yellow]Hint:[/bold yellow] {ch.hints[0] if ch.hints else 'Think iteratively!'}\n")
+        console.print(Panel(ch.solution, title="Solution", border_style="green"))
+    elif choice == "4":
+        idea = random.choice(engine.STARTUP_IDEAS)
+        console.print(f"\n💡 [bold green]{idea['name']}[/bold green]: [bold white]{idea['tagline']}[/bold white]\n")
+        console.print(f"[bold cyan]Value Proposition:[/bold cyan] {idea['value_prop']}")
+        console.print(f"[bold cyan]Target Market:[/bold cyan] {idea['target_market']}")
+        console.print(f"[bold cyan]Monetization:[/bold cyan] {idea['monetization']}\n")
+
+
+# OS Automation Sub-App
+os_app = typer.Typer(name="os", help="Windows OS Automation Agent (apps, windows, files, diagnostics, commands).")
+
+@os_app.command(name="launch", help="Launch a desktop application by name or executable.")
+def os_launch_cmd(app_name: str = typer.Argument(..., help="Application name (e.g. notepad, chrome, code, calc)")) -> None:
+    from electorn.automation.os_agent import WindowsOSAgent
+    agent = WindowsOSAgent()
+    res = agent.launch_application(app_name)
+    if res.get("success"):
+        console.print(f"[bold green]✔ Launched {app_name} (PID: {res.get('pid')})[/bold green]")
+    else:
+        console.print(f"[bold red]✖ Failed to launch {app_name}: {res.get('error')}[/bold red]")
+
+@os_app.command(name="close", help="Close a desktop application by name or PID.")
+def os_close_cmd(target: str = typer.Argument(..., help="Application name or PID")) -> None:
+    from electorn.automation.os_agent import WindowsOSAgent
+    agent = WindowsOSAgent()
+    pid = int(target) if target.isdigit() else None
+    name = target if not target.isdigit() else None
+    res = agent.close_application(app_name=name, pid=pid)
+    if res.get("success"):
+        console.print(f"[bold green]✔ Closed {target} (Terminated {res.get('terminated_count')} processes)[/bold green]")
+    else:
+        console.print(f"[bold red]✖ Failed to close {target}: {res.get('error')}[/bold red]")
+
+@os_app.command(name="organize", help="Organize files in a directory into classified folders.")
+def os_organize_cmd(
+    target_dir: Optional[str] = typer.Option(None, "--dir", "-d", help="Target folder (defaults to Downloads)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Simulate organization without moving files"),
+) -> None:
+    from electorn.automation.os_agent import WindowsOSAgent
+    agent = WindowsOSAgent()
+    path = Path(target_dir) if target_dir else None
+    res = agent.organize_directory(target_dir=path, dry_run=dry_run)
+    if res.get("success"):
+        console.print(f"[bold green]✔ Organization completed ({'Dry Run' if dry_run else 'Live'})[/bold green]")
+        console.print(f"Files affected: {res.get('files_moved', 0)}")
+        for cat, cnt in res.get("summary", {}).items():
+            if cnt > 0:
+                console.print(f"  • {cat}: {cnt} files")
+    else:
+        console.print(f"[bold red]✖ Organization failed: {res.get('error')}[/bold red]")
+
+@os_app.command(name="specs", help="Display full Windows hardware and OS diagnostics.")
+def os_specs_cmd() -> None:
+    from electorn.automation.os_agent import WindowsOSAgent
+    agent = WindowsOSAgent()
+    diag = agent.get_system_diagnostics()
+    if "error" in diag:
+        console.print(f"[bold red]✖ Diagnostics error:[/bold red] {diag['error']}")
+        return
+
+    os_info = diag.get("os", {})
+    if isinstance(os_info, dict):
+        os_str = f"{os_info.get('system', 'Windows')} {os_info.get('release', '')} ({os_info.get('machine', os_info.get('architecture', ''))})"
+    else:
+        os_str = str(os_info)
+
+    cpu_info = diag.get("cpu", {})
+    cpu_percent = cpu_info.get("percent_used", cpu_info.get("percent", 0))
+    cpu_cores = cpu_info.get("core_count", cpu_info.get("logical_cores", "N/A"))
+
+    mem_info = diag.get("memory", {})
+    total_gb = mem_info.get("total_gb", 0)
+    avail_gb = mem_info.get("available_gb", 0)
+    used_gb = round(total_gb - avail_gb, 1) if total_gb >= avail_gb else 0
+    mem_percent = mem_info.get("percent_used", mem_info.get("percent", 0))
+
+    battery = diag.get("battery") or {}
+    bat_str = f"{battery.get('percent', 'N/A')}% (Plugged: {battery.get('power_plugged', 'N/A')})" if battery else "Desktop / No battery"
+
+    drives_list = diag.get("drives", diag.get("disks", []))
+    drives_str = "\n".join(
+        f"  • {d.get('device', '')} ({d.get('mountpoint', '')}): {d.get('free_gb', 0)} GB free of {d.get('total_gb', 0)} GB ({d.get('percent_used', d.get('percent', 0))}% used)"
+        for d in drives_list
+    ) or "  • No storage partitions detected"
+
+    console.print(Panel(
+        f"[bold cyan]OS:[/bold cyan] {os_str}\n"
+        f"[bold cyan]CPU:[/bold cyan] {cpu_cores} threads • Load: {cpu_percent}%\n"
+        f"[bold cyan]RAM:[/bold cyan] {used_gb} GB / {total_gb} GB ({mem_percent}% used, {avail_gb} GB free)\n"
+        f"[bold cyan]Battery:[/bold cyan] {bat_str}\n\n"
+        f"[bold cyan]Storage Partitions:[/bold cyan]\n{drives_str}",
+        title="⚡ Windows System Diagnostics",
+        border_style="cyan",
+    ))
+
+@os_app.command(name="run", help="Execute a guarded PowerShell or Windows command safely.")
+def os_run_cmd(
+    command_str: str = typer.Argument(..., help="Command string to run safely"),
+    timeout: int = typer.Option(30, "--timeout", "-t", help="Timeout in seconds"),
+) -> None:
+    from electorn.automation.os_agent import WindowsOSAgent
+    agent = WindowsOSAgent()
+    res = agent.execute_powershell_guarded(command_str, timeout_seconds=timeout)
+    if res.get("blocked"):
+        console.print(f"[bold red]✖ BLOCKED FOR SAFETY:[/bold red] {res.get('reason')}")
+        return
+    if res.get("success"):
+        console.print(f"[bold green]✔ Command completed (Exit code: 0):[/bold green]")
+        console.print(res.get("stdout", ""))
+    else:
+        console.print(f"[bold red]✖ Command failed (Exit code: {res.get('exit_code')}):[/bold red]")
+        console.print(res.get("stderr", ""))
+
+app.add_typer(os_app)
+
+
+# Plugins Sub-App
+plugins_app = typer.Typer(name="plugins", help="Modular plugin system management and permissions.")
+
+@plugins_app.command(name="list", help="List all registered plugins and their enabled status.")
+def plugins_list_cmd() -> None:
+    from electorn.plugins.plugin_manager import PluginManager
+    mgr = PluginManager()
+    table = Table(title="Electorn Modular Plugins")
+    table.add_column("Plugin ID", style="cyan bold")
+    table.add_column("Name", style="white")
+    table.add_column("Version", style="dim")
+    table.add_column("Status", style="bold")
+    table.add_column("Permissions", style="magenta")
+    for p in mgr.list_plugins():
+        status = "[green]ENABLED[/green]" if p.get("enabled") else "[yellow]DISABLED[/yellow]"
+        perms = ", ".join(p.get("permissions", []))
+        table.add_row(p.get("id", ""), p.get("name", ""), p.get("version", "1.0.0"), status, perms)
+    console.print(table)
+
+@plugins_app.command(name="enable", help="Enable a plugin by ID.")
+def plugins_enable_cmd(plugin_id: str = typer.Argument(..., help="Plugin ID to enable")) -> None:
+    from electorn.plugins.plugin_manager import PluginManager
+    mgr = PluginManager()
+    if mgr.enable_plugin(plugin_id):
+        console.print(f"[bold green]✔ Plugin '{plugin_id}' enabled.[/bold green]")
+    else:
+        console.print(f"[bold red]✖ Plugin '{plugin_id}' not found.[/bold red]")
+
+@plugins_app.command(name="disable", help="Disable a plugin by ID.")
+def plugins_disable_cmd(plugin_id: str = typer.Argument(..., help="Plugin ID to disable")) -> None:
+    from electorn.plugins.plugin_manager import PluginManager
+    mgr = PluginManager()
+    if mgr.disable_plugin(plugin_id):
+        console.print(f"[bold green]✔ Plugin '{plugin_id}' disabled.[/bold green]")
+    else:
+        console.print(f"[bold red]✖ Plugin '{plugin_id}' not found.[/bold red]")
+
+app.add_typer(plugins_app)
+
+
+# Memory Sub-App
+memory_app = typer.Typer(name="memory", help="Companion persistent memory search, export, and management.")
+
+@memory_app.command(name="search", help="Search persistent memories by query keyword.")
+def memory_search_cmd(query: str = typer.Argument(..., help="Keyword or topic to search")) -> None:
+    from electorn.companion.memory import MemoryEngine
+    engine = MemoryEngine()
+    results = engine.search(query, limit=10)
+    if not results:
+        console.print(f"[yellow]No memories found matching '{query}'.[/yellow]")
+        return
+    table = Table(title=f"Memories matching '{query}'")
+    table.add_column("Key", style="cyan")
+    table.add_column("Category", style="magenta")
+    table.add_column("Value", style="white")
+    table.add_column("Confidence", style="dim")
+    for m in results:
+        table.add_row(m.key, m.category.value, m.value, f"{m.confidence:.2f}")
+    console.print(table)
+
+@memory_app.command(name="export", help="Export long-term memories to Markdown or JSON format.")
+def memory_export_cmd(
+    fmt: str = typer.Option("markdown", "--format", "-f", help="Output format: markdown or json"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Target output file path"),
+) -> None:
+    from electorn.companion.memory import MemoryEngine
+    engine = MemoryEngine()
+    content = engine.export_memories(fmt=fmt)
+    if output:
+        out_path = Path(output)
+        out_path.write_text(content, encoding="utf-8")
+        console.print(f"[bold green]✔ Exported memories to {out_path}[/bold green]")
+    else:
+        console.print(content)
+
+app.add_typer(memory_app)
+
+
+# Self-Improvement Sub-App
+improve_app = typer.Typer(name="improve", help="Controlled self-improvement agent for health diagnosis and sandboxed code patching.")
+
+@improve_app.command(name="audit", help="Audit system dependencies, runtime health, and error logs.")
+def improve_audit_cmd() -> None:
+    from electorn.verification.improvement_agent import SystemSelfImprovementAgent
+    agent = SystemSelfImprovementAgent()
+    diag = agent.audit_system()
+    table = Table(title="⚡ System Self-Improvement Audit")
+    table.add_column("Component", style="cyan")
+    table.add_column("Status", style="bold")
+    table.add_column("Details", style="white")
+    for comp, st in diag.runtimes.items():
+        table.add_row(comp, "[green]OK[/green]" if st["installed"] else "[red]MISSING[/red]", st.get("details", ""))
+    console.print(table)
+    if diag.recent_errors:
+        console.print(f"\n[bold yellow]Recent Error Logs ({len(diag.recent_errors)} found):[/bold yellow]")
+        for err in diag.recent_errors[:5]:
+            console.print(f"  • {err.get('event_type')}: {err.get('error', err)}")
+    else:
+        console.print("\n[bold green]✔ No recent runtime error traces detected in audit logs.[/bold green]")
+
+@improve_app.command(name="patch", help="Generate a verified sandboxed patch for a file with automated backup.")
+def improve_patch_cmd(
+    file_path: str = typer.Argument(..., help="Target file path to patch"),
+    instruction: str = typer.Argument(..., help="Description of patch to make"),
+) -> None:
+    from electorn.verification.improvement_agent import SystemSelfImprovementAgent
+    agent = SystemSelfImprovementAgent()
+    console.print(f"[bold cyan]Analyzing and generating patch for {file_path}...[/bold cyan]")
+    patch = agent.propose_patch(Path(file_path), instruction)
+    if not patch.is_valid:
+        console.print(f"[bold red]✖ Patch validation failed:[/bold red] {patch.validation_error}")
+        return
+    console.print(Panel(patch.unified_diff, title="Unified Diff Preview", border_style="cyan"))
+    confirm = Prompt.ask("\n[bold yellow]Apply this patch to the file?[/bold yellow]", choices=["y", "n"], default="n")
+    if confirm.lower() == "y":
+        res = agent.apply_patch(patch)
+        if res.get("success"):
+            console.print(f"[bold green]✔ Patch applied successfully! Backup saved to {res.get('backup_path')}[/bold green]")
+        else:
+            console.print(f"[bold red]✖ Failed to apply patch: {res.get('error')}[/bold red]")
+
+app.add_typer(improve_app)
 
 
 def main() -> None:
