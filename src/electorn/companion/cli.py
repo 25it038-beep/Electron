@@ -59,17 +59,21 @@ def companion_default_callback(
     screen: Optional[bool] = typer.Option(None, "--screen/--no-screen", help="Enable/disable screen observation"),
     voice: Optional[bool] = typer.Option(None, "--voice/--no-voice", help="Enable/disable voice speech"),
     status: bool = typer.Option(False, "--status", help="Show companion status and exit"),
+    call: bool = typer.Option(False, "--call", "-c", help="Launch in 3D animated avatar video-call mode"),
 ) -> None:
     """Launch the unified all-in-one Electorn AI Companion (Voice, Screen, Autonomous Conversation)."""
     if ctx.invoked_subcommand is None:
         if status:
             status_cmd()
             return
+        if call:
+            call_cmd()
+            return
         start_cmd(mode=mode, screen=screen, voice=voice)
 
 
 # =============================================================================
-# START / STOP / PAUSE / RESUME / STATUS
+# START / STOP / PAUSE / RESUME / STATUS / VIDEO CALL
 # =============================================================================
 
 @companion_app.command(name="start", help="Start the persistent companion voice and screen session.")
@@ -78,8 +82,13 @@ def start_cmd(
     mode: Optional[str] = typer.Option(None, "--mode", "-m", help="companion, focus, study, night, passive, privacy"),
     screen: Optional[bool] = typer.Option(None, "--screen", help="Enable/disable screen observation"),
     voice: Optional[bool] = typer.Option(None, "--voice", help="Enable/disable voice speech"),
+    call: bool = typer.Option(False, "--call", "-c", help="Launch in 3D animated avatar video-call mode"),
 ) -> None:
-    """Launch the interactive companion terminal dashboard and voice session."""
+    """Launch the interactive companion terminal dashboard or video-call mode."""
+    if call:
+        call_cmd()
+        return
+
     storage = CompanionStorage()
     config = storage.load_config()
 
@@ -100,6 +109,60 @@ def start_cmd(
     supervisor = CompanionSupervisor(config=config)
     ui = CompanionInterface(supervisor=supervisor)
     ui.run_interactive_session()
+
+
+@companion_app.command(name="call", help="Start the immersive 3D animated avatar video-call session.")
+@companion_app.command(name="video-call", help="Start the immersive 3D animated avatar video-call session.")
+def call_cmd(
+    style: Optional[str] = typer.Option(None, "--style", "-s", help="realistic, anime, hologram, minimalist, canvas_2d"),
+    port: Optional[int] = typer.Option(None, "--port", "-p", help="Port for the video-call web server"),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Do not automatically open the browser"),
+) -> None:
+    """Launch the real-time 3D animated avatar video-call interface."""
+    import time
+    from electorn.companion.video_server import VideoCallServer
+    from electorn.companion.schema import AvatarStyle
+
+    storage = CompanionStorage()
+    config = storage.load_config()
+
+    if style:
+        try:
+            config.video_call.avatar_style = AvatarStyle(style.lower())
+        except ValueError:
+            console.print(f"[red]Invalid avatar style '{style}'. Choose from: realistic, anime, hologram, minimalist, canvas_2d[/red]")
+            raise typer.Exit(1)
+
+    if port:
+        config.video_call.port = port
+
+    supervisor = CompanionSupervisor(config=config)
+    supervisor.start()
+
+    server = VideoCallServer(supervisor=supervisor, config=config.video_call)
+    url = server.start_in_thread(open_browser=not no_browser)
+
+    user = config.personality.user_name
+    name = config.personality.name
+    console.print(Panel(
+        f"[bold magenta]💖 {name} AI Companion — Video Call Live[/bold magenta]\n\n"
+        f"👤 [bold white]User:[/bold white] [bold cyan]{user}[/bold cyan]\n"
+        f"🎭 [bold white]Avatar Style:[/bold white] [bold green]{config.video_call.avatar_style.value}[/bold green]\n"
+        f"🌐 [bold white]Live URL:[/bold white] [underline cyan]{url}[/underline cyan]\n"
+        f"🎙️ [bold white]Features:[/bold white] 3D Animated Avatar • Web Audio Lip-Sync • Live Captions • Camera Vision\n\n"
+        f"[dim]Press [bold]Ctrl+C[/bold] in this terminal or click [bold]📞 End Call[/bold] in the browser to finish.[/dim]",
+        border_style="magenta",
+    ))
+
+    try:
+        while True:
+            time.sleep(1.0)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Ending video call session...[/yellow]")
+    finally:
+        server.stop()
+        supervisor.stop()
+        console.print("[green]✔ Video call session cleanly ended and resources released.[/green]")
 
 
 @companion_app.command(name="stop", help="Stop any active background companion instance.")

@@ -84,10 +84,26 @@ def live_command(
     mode: Optional[str] = typer.Option(None, "--mode", "-m", help="companion, focus, study, night, passive, privacy"),
     screen: Optional[bool] = typer.Option(None, "--screen/--no-screen", help="Enable/disable screen observation"),
     voice: Optional[bool] = typer.Option(None, "--voice/--no-voice", help="Enable/disable voice speech"),
+    call: bool = typer.Option(False, "--call", "-c", help="Launch in 3D animated avatar video-call mode"),
 ) -> None:
     """Launch the unified all-in-one AI companion directly."""
-    from electorn.companion.cli import start_cmd
+    from electorn.companion.cli import call_cmd, start_cmd
+    if call:
+        call_cmd()
+        return
     start_cmd(mode=mode, screen=screen, voice=voice)
+
+
+@app.command(name="call", help="Launch immersive 3D animated avatar video-call with Electorn Companion.")
+@app.command(name="video-call", help="Launch immersive 3D animated avatar video-call with Electorn Companion.")
+def call_command(
+    style: Optional[str] = typer.Option(None, "--style", "-s", help="realistic, anime, hologram, minimalist, canvas_2d"),
+    port: Optional[int] = typer.Option(None, "--port", "-p", help="Port for video-call web server"),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Do not automatically open the browser"),
+) -> None:
+    """Launch real-time 3D animated avatar video call with Electorn Companion."""
+    from electorn.companion.cli import call_cmd
+    call_cmd(style=style, port=port, no_browser=no_browser)
 
 
 
@@ -138,11 +154,12 @@ def default_callback(ctx: typer.Context) -> None:
         console.print("  [bold blue]5.[/bold blue] 🌐 [bold white]HS AI Solutions Studio[/bold white] — Explore the product suite (Pendulum, Lumina, Ledger, HS CODE)")
         console.print("  [bold magenta]6.[/bold magenta] 📬 [bold white]Personal Communication Assistant[/bold white] — Email, WhatsApp, Files, Calls & Tasks")
         console.print("  [bold magenta]7.[/bold magenta] 💖 [bold white]AI Companion Mode[/bold white] — Voice-enabled, screen-aware girlfriend persona (Aria)")
+        console.print("  [bold magenta]8.[/bold magenta] 💖 📹 [bold white]AI Companion Video Call[/bold white] — 3D Animated Avatar, Web Audio Lip-Sync & Camera Vision")
         console.print("  [bold red]0.[/bold red] ❌ [bold white]Exit[/bold white]\n")
 
         choice = Prompt.ask(
             "[bold cyan]Select an option[/bold cyan]",
-            choices=["1", "2", "3", "4", "5", "6", "7", "0"],
+            choices=["1", "2", "3", "4", "5", "6", "7", "8", "0"],
             default="1",
         )
 
@@ -164,6 +181,9 @@ def default_callback(ctx: typer.Context) -> None:
         elif choice == "7":
             from electorn.companion.cli import start_cmd
             start_cmd(mode=None, screen=None, voice=None)
+        elif choice == "8":
+            from electorn.companion.cli import call_cmd
+            call_cmd()
         else:
             console.print("\n[yellow]Exiting Electorn AI. Goodbye![/yellow]")
 

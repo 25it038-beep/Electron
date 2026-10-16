@@ -213,6 +213,40 @@ class CompanionMemoryItem(BaseModel):
     source: str = "conversation"                 # conversation, screen_observation, explicit_user_note
 
 
+class AvatarStyle(str, Enum):
+    """Selectable visual style presets for the animated companion avatar."""
+    REALISTIC = "realistic"
+    ANIME = "anime"
+    HOLOGRAM = "hologram"
+    MINIMALIST = "minimalist"
+    CANVAS_2D = "canvas_2d"
+
+
+class AvatarExpression(str, Enum):
+    """Dynamic emotional and conversational expression states for avatar rendering."""
+    IDLE = "idle"
+    LISTENING = "listening"
+    THINKING = "thinking"
+    SPEAKING = "speaking"
+    HAPPY = "happy"
+    CONFUSED = "confused"
+    EMPATHETIC = "empathetic"
+    ERROR = "error"
+
+
+class VideoCallConfig(BaseModel):
+    """Configuration for real-time video call interface and 3D avatar rendering."""
+    enabled: bool = True
+    host: str = "127.0.0.1"
+    port: int = 8765
+    avatar_style: AvatarStyle = AvatarStyle.REALISTIC
+    camera_enabled: bool = False
+    camera_analysis_enabled: bool = True
+    live_captions: bool = True
+    audio_visualizer: bool = True
+    quality: str = "auto"                        # auto, high, medium, low
+
+
 class CompanionConfig(BaseModel):
     """Root configuration for Companion Mode."""
     mode: CompanionMode = CompanionMode.COMPANION
@@ -222,6 +256,7 @@ class CompanionConfig(BaseModel):
     startup: StartupConfig = Field(default_factory=StartupConfig)
     proactive: ProactiveSpeechConfig = Field(default_factory=ProactiveSpeechConfig)
     screen: ScreenObservationConfig = Field(default_factory=ScreenObservationConfig)
+    video_call: VideoCallConfig = Field(default_factory=VideoCallConfig)
     storage_directory: Path = Field(default_factory=lambda: Path.home() / ".electorn" / "companion")
     voice_enabled: bool = True
     push_to_talk: bool = False

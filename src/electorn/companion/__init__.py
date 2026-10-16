@@ -26,6 +26,9 @@ from electorn.companion.schema import (
     ScreenObservationConfig,
     ScreenObservationReport,
     StartupConfig,
+    AvatarStyle,
+    AvatarExpression,
+    VideoCallConfig,
 )
 from electorn.companion.screen_observer import ScreenObservationEngine
 from electorn.companion.startup import StartupManager
@@ -33,6 +36,7 @@ from electorn.companion.storage import CompanionStorage
 from electorn.companion.supervisor import CompanionSupervisor
 from electorn.companion.time_engine import TimeAwarenessEngine
 from electorn.companion.tools import CompanionTools
+from electorn.companion.video_server import VideoCallServer
 from electorn.companion.vision_analyzer import VisionAnalyzer
 from electorn.companion.voice_session import CompanionVoiceSession
 
@@ -70,4 +74,8 @@ __all__ = [
     "CompanionTools",
     "VisionAnalyzer",
     "CompanionVoiceSession",
+    "AvatarStyle",
+    "AvatarExpression",
+    "VideoCallConfig",
+    "VideoCallServer",
 ]
