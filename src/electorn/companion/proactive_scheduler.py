@@ -81,8 +81,8 @@ class ProactiveScheduler:
         if self.state.hourly_proactive_count >= self.config.proactive.max_per_hour and priority > 2:
             return False
 
-        # 8. Quiet hours check
-        if self.is_in_quiet_hours() and priority > 2:
+        # 8. Quiet hours check (permits security, user reminders, and bedtime reminders)
+        if self.is_in_quiet_hours() and priority > 3:
             return False
 
         # 9. Cooldown interval check

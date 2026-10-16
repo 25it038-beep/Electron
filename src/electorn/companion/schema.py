@@ -141,7 +141,7 @@ class ProactiveSpeechConfig(BaseModel):
 
 class ScreenObservationConfig(BaseModel):
     """Configuration for privacy-preserving screen observation."""
-    enabled: bool = False                        # Explicit opt-in required
+    enabled: bool = True                         # Live screen observation active by default
     interval_seconds: int = 15                   # Capture frequency
     change_detection_threshold: float = 0.08     # 8% visual variance required before analyzing
     capture_active_window_only: bool = True      # Capture active foreground window instead of full desktop

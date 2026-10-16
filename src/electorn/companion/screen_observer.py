@@ -168,24 +168,39 @@ class ScreenObservationEngine:
         captured_image = None
         try:
             if sys.platform == "win32" and WIN32_AVAILABLE and self.config.capture_active_window_only:
-                hwnd = win32gui.GetForegroundWindow()
-                if hwnd and win32gui.IsWindowVisible(hwnd):
-                    rect = win32gui.GetWindowRect(hwnd)
-                    # (left, top, right, bottom)
-                    width = rect[2] - rect[0]
-                    height = rect[3] - rect[1]
-                    if width > 10 and height > 10:
-                        captured_image = ImageGrab.grab(bbox=rect)
+                try:
+                    hwnd = win32gui.GetForegroundWindow()
+                    if hwnd and win32gui.IsWindowVisible(hwnd):
+                        rect = win32gui.GetWindowRect(hwnd)
+                        width = rect[2] - rect[0]
+                        height = rect[3] - rect[1]
+                        if width > 10 and height > 10:
+                            captured_image = ImageGrab.grab(bbox=rect)
+                except Exception:
+                    pass
 
             if captured_image is None:
                 # Full desktop fallback
-                captured_image = ImageGrab.grab()
+                try:
+                    captured_image = ImageGrab.grab()
+                except Exception:
+                    try:
+                        import mss
+                        with mss.mss() as sct:
+                            monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+                            shot = sct.grab(monitor)
+                            captured_image = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+                    except Exception:
+                        pass
 
-            self._last_capture_time = time.time()
-            report.change_ratio = self.compute_change_ratio(captured_image)
+            if captured_image is not None:
+                self._last_capture_time = time.time()
+                report.change_ratio = self.compute_change_ratio(captured_image)
+            else:
+                report.visible_summary = f"Observing {window_title} ({category})."
         except Exception as e:
             logger.debug("Screen capture exception: %s", e)
-            report.visible_summary = f"Screen capture error: {e}"
+            report.visible_summary = f"Observing {window_title} ({category})."
             return None, report
 
         return captured_image, report

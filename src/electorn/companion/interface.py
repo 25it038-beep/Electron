@@ -1,4 +1,4 @@
-"""Interactive Rich terminal dashboard and session runner for Companion Mode."""
+"""Interactive Rich terminal dashboard and live voice/screen runner for Companion Mode."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ console = Console(legacy_windows=False)
 
 
 class CompanionInterface:
-    """Rich terminal user interface and interactive conversation loop for Companion Mode."""
+    """Rich terminal user interface and interactive live voice/screen session for Companion Mode."""
 
     def __init__(self, supervisor: CompanionSupervisor) -> None:
         self.supervisor = supervisor
@@ -44,8 +44,8 @@ class CompanionInterface:
         config = self.supervisor.config
 
         # Status indicators
-        mic_status = "🔴 MUTED" if state.is_muted else ("🟢 ACTIVE" if state.mic_active and not state.is_paused else "⚪ OFF")
-        screen_status = "🟢 ACTIVE" if config.screen.enabled and state.screen_active and not state.is_paused else "⚪ OFF"
+        mic_status = "🔴 MUTED" if state.is_muted else ("🟢 LIVE LISTENING" if state.mic_active and not state.is_paused else "⚪ OFF")
+        screen_status = "🟢 LIVE MONITORING" if config.screen.enabled and state.screen_active and not state.is_paused else "⚪ OFF"
         barge_in = "🟢 ON" if config.barge_in_enabled else "⚪ OFF"
         paused_status = "⏸️ PAUSED" if state.is_paused else f"▶️ {state.current_lifecycle.value}"
 
@@ -91,13 +91,13 @@ class CompanionInterface:
             "Activity:", f"[cyan]{state.current_activity.value.upper()}[/cyan]",
         )
 
-        obs_text = state.active_window_title or "No active window inspected yet"
+        obs_text = state.active_window_title or "Inspecting desktop workspace..."
         if len(obs_text) > 60:
             obs_text = obs_text[:57] + "..."
 
         table_panel = Panel(
             status_table,
-            title=f"💖 {config.personality.name} Companion Dashboard • Window: {obs_text}",
+            title=f"💖 {config.personality.name} Live Companion • Active Window: {obs_text}",
             border_style=mode_style,
         )
         return table_panel
@@ -107,101 +107,192 @@ class CompanionInterface:
         if not self.messages:
             return
 
-        for speaker, text in self.messages[-6:]:
+        for speaker, text in self.messages[-5:]:
             if speaker == self.supervisor.config.personality.name:
                 console.print(f"[bold magenta]💖 {speaker}:[/bold magenta] {text}")
             else:
                 console.print(f"[bold green]👤 {speaker}:[/bold green] {text}")
 
     def run_interactive_session(self) -> None:
-        """Start the live companion interaction loop."""
+        """Start the live companion interaction loop with hands-free voice and live screen access."""
+        # Ensure live screen is enabled
+        self.supervisor.config.screen.enabled = True
+        self.supervisor.screen_observer.config.enabled = True
         self.supervisor.start()
         self._running = True
 
         console.clear()
         console.print(Panel(
             f"[bold magenta]⚡ ELECTORN COMPANION MODE[/bold magenta] — Persistent Voice & Screen-Aware AI (Aria)\n"
-            f"[dim]Addressing: [bold]{self.supervisor.config.personality.user_name}[/bold] | Modes: [bold]/companion[/bold], [bold]/focus[/bold], [bold]/study[/bold], [bold]/night[/bold], [bold]/privacy[/bold]\n"
-            f"Commands: [bold]/screen[/bold], [bold]/mute[/bold], [bold]/unmute[/bold], [bold]/snooze[/bold], [bold]/pause[/bold], [bold]/resume[/bold], [bold]/exit[/bold][/dim]",
+            f"[dim]Addressing: [bold]{self.supervisor.config.personality.user_name}[/bold] | Live Screen: [bold green]ACTIVE[/bold green] | Live Voice: [bold green]ACTIVE[/bold green]\n"
+            f"Voice: Speak naturally into your mic at any time. Press [bold]T[/bold] to type, [bold]M[/bold] to mute, [bold]Q[/bold] to quit.[/dim]",
             border_style="magenta",
         ))
 
+        # Initial live screen capture
+        try:
+            img, report = self.supervisor.screen_observer.capture_screen()
+            if img:
+                analyzed = self.supervisor.vision_analyzer.analyze(img, report)
+                self.supervisor.latest_report = analyzed
+        except Exception:
+            pass
+
+        # Initial greeting aloud
+        greeting = self.supervisor.personality.generate_greeting()
+        self._add_message(self.supervisor.config.personality.name, greeting)
+        console.print(self.build_dashboard())
+        console.print(f"\n[bold magenta]💖 {self.supervisor.config.personality.name}:[/bold magenta] {greeting}\n")
+
+        if self.supervisor.config.voice_enabled and not self.supervisor.state.is_muted and self.supervisor.state.active_mode != CompanionMode.PRIVACY:
+            self.supervisor.voice.speak_async(greeting)
+
         try:
             while self._running:
-                console.print(self.build_dashboard())
-                self.display_recent_conversation()
+                # Check for keyboard hit on Windows without blocking
+                user_typed = None
+                if sys.platform == "win32":
+                    try:
+                        import msvcrt
+                        if msvcrt.kbhit():
+                            ch = msvcrt.getch()
+                            if ch in (b'q', b'Q', b'\x1b'):
+                                console.print(f"\n[yellow]Shutting down Companion session. Goodbye {self.supervisor.config.personality.user_name}![/yellow]")
+                                break
+                            elif ch in (b'm', b'M'):
+                                is_mut = self.supervisor.voice.toggle_mute()
+                                self.supervisor.state.is_muted = is_mut
+                                status_txt = "MUTED" if is_mut else "UNMUTED"
+                                console.print(f"\n[yellow]Microphone {status_txt}.[/yellow]\n")
+                                continue
+                            elif ch in (b'p', b'P'):
+                                if self.supervisor.state.is_paused:
+                                    self.supervisor.resume()
+                                    console.print("\n[green]▶️ Companion resumed.[/green]\n")
+                                else:
+                                    self.supervisor.pause()
+                                    console.print("\n[yellow]⏸️ Companion paused.[/yellow]\n")
+                                continue
+                            elif ch in (b't', b'T', b'\r'):
+                                user_typed = Prompt.ask("\n[bold cyan]Type message or command[/bold cyan]").strip()
+                    except Exception:
+                        pass
 
-                user_input = Prompt.ask("\n[bold cyan]Speak or type (or /help)[/bold cyan]").strip()
-                if not user_input:
+                # If user typed a command
+                if user_typed:
+                    if not self._handle_text_input(user_typed):
+                        break
                     continue
 
-                lower = user_input.lower()
-                if lower in ("/exit", "/quit", "exit", "quit", "q"):
-                    console.print(f"\n[yellow]Shutting down Companion session. Goodbye {self.supervisor.config.personality.user_name}![/yellow]")
-                    break
+                # Live Voice Listening Turn
+                if (
+                    self.supervisor.config.voice_enabled
+                    and not self.supervisor.state.is_muted
+                    and self.supervisor.state.active_mode != CompanionMode.PRIVACY
+                    and not self.supervisor.state.is_paused
+                ):
+                    def status_update(msg: str) -> None:
+                        if "Transcribing" in msg:
+                            console.print(f"[dim cyan]{msg}[/dim cyan]", end="\r")
 
-                if lower in ("/pause", "pause"):
-                    self.supervisor.pause()
-                    console.print("[yellow]⏸️ Companion paused.[/yellow]\n")
-                    continue
+                    # Live mic recording
+                    voice_text = self.supervisor.voice.listen_for_user(
+                        timeout_seconds=3.5,
+                        status_cb=status_update,
+                    )
 
-                if lower in ("/resume", "resume"):
-                    self.supervisor.resume()
-                    console.print("[green]▶️ Companion resumed.[/green]\n")
-                    continue
+                    if voice_text and voice_text.strip():
+                        console.print(f"\n[bold cyan]👤 {self.supervisor.config.personality.user_name} (Voice)[/bold cyan] ❯ [white]{voice_text}[/white]")
+                        self._add_message(self.supervisor.config.personality.user_name, voice_text)
 
-                if lower in ("/mute", "mute"):
-                    self.supervisor.mute()
-                    console.print("[red]🔇 Microphone muted.[/red]\n")
-                    continue
+                        # Check for exit command
+                        if any(term in voice_text.lower() for term in ["exit", "quit", "goodbye", "bye bye", "stop companion"]):
+                            console.print(f"\n[yellow]Goodbye {self.supervisor.config.personality.user_name}! Have a great rest of your day.[/yellow]")
+                            break
 
-                if lower in ("/unmute", "unmute"):
-                    self.supervisor.unmute()
-                    console.print("[green]🎙️ Microphone unmuted.[/green]\n")
-                    continue
-
-                if lower in ("/focus", "focus"):
-                    self.supervisor.set_mode(CompanionMode.FOCUS)
-                    console.print("[blue]Switched to Focus Mode.[/blue]\n")
-                    continue
-
-                if lower in ("/study", "study"):
-                    self.supervisor.set_mode(CompanionMode.STUDY)
-                    console.print("[green]Switched to Study Mode.[/green]\n")
-                    continue
-
-                if lower in ("/night", "night"):
-                    self.supervisor.set_mode(CompanionMode.NIGHT)
-                    console.print("[purple]Switched to Night Mode.[/purple]\n")
-                    continue
-
-                if lower in ("/companion", "companion"):
-                    self.supervisor.set_mode(CompanionMode.COMPANION)
-                    console.print("[magenta]Switched to Companion Mode.[/magenta]\n")
-                    continue
-
-                if lower in ("/privacy", "privacy"):
-                    self.supervisor.set_mode(CompanionMode.PRIVACY)
-                    console.print("[red]Switched to Privacy Mode (Mic and screen disabled).[/red]\n")
-                    continue
-
-                if lower in ("/snooze", "snooze"):
-                    self.supervisor.time_engine.snooze(self.supervisor.config.bedtime, minutes=30)
-                    console.print("[yellow]Bedtime reminder snoozed for 30 minutes.[/yellow]\n")
-                    continue
-
-                if lower in ("/screen", "screen"):
-                    self.supervisor.config.screen.enabled = not self.supervisor.config.screen.enabled
-                    self.supervisor.screen_observer.config.enabled = self.supervisor.config.screen.enabled
-                    status = "ENABLED" if self.supervisor.config.screen.enabled else "DISABLED"
-                    console.print(f"[cyan]Screen observation {status}.[/cyan]\n")
-                    continue
-
-                # Process message
-                self._add_message(self.supervisor.config.personality.user_name, user_input)
-                console.print("[dim]Thinking...[/dim]")
-                reply = self.supervisor.process_user_input(user_input)
-                console.print(f"[bold magenta]💖 {self.supervisor.config.personality.name}:[/bold magenta] {reply}\n")
+                        console.print("[dim]Thinking...[/dim]")
+                        reply = self.supervisor.process_user_input(voice_text)
+                        console.print(f"[bold magenta]💖 {self.supervisor.config.personality.name}:[/bold magenta] {reply}\n")
+                    else:
+                        # Brief sleep to yield CPU before next mic turn
+                        time.sleep(0.1)
+                else:
+                    # In privacy or muted mode, fall back to typed prompt
+                    typed = Prompt.ask("\n[bold cyan]Type message (or /help, /exit)[/bold cyan]").strip()
+                    if typed:
+                        if not self._handle_text_input(typed):
+                            break
 
         finally:
             self.supervisor.stop()
+
+    def _handle_text_input(self, user_input: str) -> bool:
+        """Handle typed slash commands and text chats. Returns False to exit session."""
+        lower = user_input.lower()
+        if lower in ("/exit", "/quit", "exit", "quit", "q"):
+            console.print(f"\n[yellow]Shutting down Companion session. Goodbye {self.supervisor.config.personality.user_name}![/yellow]")
+            return False
+
+        if lower in ("/pause", "pause"):
+            self.supervisor.pause()
+            console.print("[yellow]⏸️ Companion paused.[/yellow]\n")
+            return True
+
+        if lower in ("/resume", "resume"):
+            self.supervisor.resume()
+            console.print("[green]▶️ Companion resumed.[/green]\n")
+            return True
+
+        if lower in ("/mute", "mute"):
+            self.supervisor.mute()
+            console.print("[red]🔇 Microphone muted.[/red]\n")
+            return True
+
+        if lower in ("/unmute", "unmute"):
+            self.supervisor.unmute()
+            console.print("[green]🎙️ Microphone unmuted.[/green]\n")
+            return True
+
+        if lower in ("/focus", "focus"):
+            self.supervisor.set_mode(CompanionMode.FOCUS)
+            console.print("[blue]Switched to Focus Mode.[/blue]\n")
+            return True
+
+        if lower in ("/study", "study"):
+            self.supervisor.set_mode(CompanionMode.STUDY)
+            console.print("[green]Switched to Study Mode.[/green]\n")
+            return True
+
+        if lower in ("/night", "night"):
+            self.supervisor.set_mode(CompanionMode.NIGHT)
+            console.print("[purple]Switched to Night Mode.[/purple]\n")
+            return True
+
+        if lower in ("/companion", "companion"):
+            self.supervisor.set_mode(CompanionMode.COMPANION)
+            console.print("[magenta]Switched to Companion Mode.[/magenta]\n")
+            return True
+
+        if lower in ("/privacy", "privacy"):
+            self.supervisor.set_mode(CompanionMode.PRIVACY)
+            console.print("[red]Switched to Privacy Mode (Mic and screen disabled).[/red]\n")
+            return True
+
+        if lower in ("/snooze", "snooze"):
+            self.supervisor.time_engine.snooze(self.supervisor.config.bedtime, minutes=30)
+            console.print("[yellow]Bedtime reminder snoozed for 30 minutes.[/yellow]\n")
+            return True
+
+        if lower in ("/screen", "screen"):
+            self.supervisor.config.screen.enabled = not self.supervisor.config.screen.enabled
+            self.supervisor.screen_observer.config.enabled = self.supervisor.config.screen.enabled
+            status = "ENABLED" if self.supervisor.config.screen.enabled else "DISABLED"
+            console.print(f"[cyan]Screen observation {status}.[/cyan]\n")
+            return True
+
+        # Process message
+        self._add_message(self.supervisor.config.personality.user_name, user_input)
+        console.print("[dim]Thinking...[/dim]")
+        reply = self.supervisor.process_user_input(user_input)
+        console.print(f"[bold magenta]💖 {self.supervisor.config.personality.name}:[/bold magenta] {reply}\n")
+        return True
