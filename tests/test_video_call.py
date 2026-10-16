@@ -138,3 +138,20 @@ def test_cli_root_call_help():
     assert "--style" in res.output
     assert "--port" in res.output
     assert "--no-browser" in res.output
+
+
+def test_call_cmd_direct_python_invocation():
+    """Verify calling call_cmd() directly in Python without arguments does not raise OptionInfo errors."""
+    from electorn.companion.cli import call_cmd
+
+    with patch("electorn.companion.cli.CompanionSupervisor") as mock_sup_cls, \
+         patch("electorn.companion.video_server.VideoCallServer") as mock_srv_cls, \
+         patch("time.sleep", side_effect=KeyboardInterrupt):
+        mock_srv = MagicMock()
+        mock_srv.start_in_thread.return_value = "http://127.0.0.1:8765"
+        mock_srv_cls.return_value = mock_srv
+
+        # Invoking call_cmd with zero arguments (which previously passed OptionInfo)
+        call_cmd()
+        assert mock_srv_cls.called
+

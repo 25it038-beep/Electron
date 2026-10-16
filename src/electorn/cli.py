@@ -89,7 +89,7 @@ def live_command(
     """Launch the unified all-in-one AI companion directly."""
     from electorn.companion.cli import call_cmd, start_cmd
     if call:
-        call_cmd()
+        call_cmd(style=None, port=None, no_browser=False)
         return
     start_cmd(mode=mode, screen=screen, voice=voice)
 
@@ -183,7 +183,7 @@ def default_callback(ctx: typer.Context) -> None:
             start_cmd(mode=None, screen=None, voice=None)
         elif choice == "8":
             from electorn.companion.cli import call_cmd
-            call_cmd()
+            call_cmd(style=None, port=None, no_browser=False)
         else:
             console.print("\n[yellow]Exiting Electorn AI. Goodbye![/yellow]")
 

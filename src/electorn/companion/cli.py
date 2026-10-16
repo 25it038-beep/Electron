@@ -85,9 +85,19 @@ def start_cmd(
     call: bool = typer.Option(False, "--call", "-c", help="Launch in 3D animated avatar video-call mode"),
 ) -> None:
     """Launch the interactive companion terminal dashboard or video-call mode."""
+    # Sanitize parameter types in case invoked directly from Python
+    if not isinstance(call, bool):
+        call = False
     if call:
-        call_cmd()
+        call_cmd(style=None, port=None, no_browser=False)
         return
+
+    if not isinstance(mode, str):
+        mode = None
+    if not isinstance(screen, bool):
+        screen = None
+    if not isinstance(voice, bool):
+        voice = None
 
     storage = CompanionStorage()
     config = storage.load_config()
@@ -122,6 +132,14 @@ def call_cmd(
     import time
     from electorn.companion.video_server import VideoCallServer
     from electorn.companion.schema import AvatarStyle
+
+    # Sanitize parameter types in case invoked directly from Python without arguments
+    if not isinstance(style, str):
+        style = None
+    if not isinstance(port, int):
+        port = None
+    if not isinstance(no_browser, bool):
+        no_browser = False
 
     storage = CompanionStorage()
     config = storage.load_config()
