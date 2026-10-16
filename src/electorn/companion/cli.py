@@ -19,10 +19,12 @@ from electorn.companion.schema import (
     HumorLevel,
     MemoryCategory,
 )
+from electorn.companion.screen_observer import ScreenObservationEngine
 from electorn.companion.startup import StartupManager
 from electorn.companion.storage import CompanionStorage
 from electorn.companion.supervisor import CompanionSupervisor
 from electorn.companion.time_engine import TimeAwarenessEngine
+from electorn.companion.vision_analyzer import VisionAnalyzer
 
 companion_app = typer.Typer(
     name="companion",
@@ -351,6 +353,100 @@ def screen_exclusions_cmd() -> None:
     console.print("[bold cyan]Excluded Applications:[/bold cyan]")
     for app in cfg.screen.excluded_apps:
         console.print(f"  - {app}")
+
+
+@screen_subapp.command(name="live", help="Real-time live screen monitoring and sharing feed.")
+@screen_subapp.command(name="watch", help="Real-time live screen monitoring and sharing feed.")
+def screen_live_cmd(
+    interval: int = typer.Option(3, "--interval", "-i", help="Monitoring capture interval in seconds"),
+    count: int = typer.Option(0, "--count", "-c", help="Number of frames to observe (0 = continuous)"),
+) -> None:
+    """Stream live real-time screen monitoring and visual activity feed."""
+    import time
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    cfg.screen.enabled = True
+    observer = ScreenObservationEngine(config=cfg.screen)
+    analyzer = VisionAnalyzer(config=cfg.screen)
+
+    console.print(Panel(
+        f"[bold magenta]🖥️ ELECTORN REAL-TIME SCREEN SHARING & MONITORING[/bold magenta]\n"
+        f"[dim]Observing foreground windows, process activity, OCR text, and code errors every {interval}s.\n"
+        f"Press [bold]Ctrl+C[/bold] to exit monitoring.[/dim]",
+        border_style="magenta",
+    ))
+
+    frames = 0
+    try:
+        while True:
+            img, report = observer.capture_screen()
+            analyzed = analyzer.analyze(img, report) if img else report
+
+            table = Table(title=f"Live Screen Frame #{frames + 1} • {time.strftime('%H:%M:%S')}", border_style="cyan")
+            table.add_column("Property", style="bold cyan")
+            table.add_column("Value", style="white")
+
+            table.add_row("Active Window", analyzed.window_title)
+            table.add_row("Process Name", analyzed.process_name)
+            table.add_row("App Category", analyzed.app_category)
+            table.add_row("Activity Category", f"[bold green]{analyzed.activity_category.value.upper()}[/bold green]")
+            table.add_row("Sustained Duration", f"{int(analyzed.sustained_duration_seconds)}s ({int(analyzed.sustained_duration_seconds / 60)} min)")
+            table.add_row("Visual Change Ratio", f"{analyzed.change_ratio * 100:.1f}%")
+            table.add_row("Privacy Filter", "[red]EXCLUDED/FILTERED[/red]" if analyzed.is_excluded else "[green]PERMITTED[/green]")
+            table.add_row("Visual Summary", analyzed.visible_summary or "Inspecting visual workspace...")
+
+            if analyzed.visible_error:
+                table.add_row("Detected Error", f"[bold red]{analyzed.visible_error}[/bold red]")
+
+            console.print(table)
+            frames += 1
+            if count > 0 and frames >= count:
+                break
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Screen monitoring stopped.[/yellow]")
+
+
+@screen_subapp.command(name="snapshot", help="Capture and analyze instant screen snapshot.")
+def screen_snapshot_cmd(
+    save: bool = typer.Option(True, "--save/--no-save", help="Save captured snapshot image to disk"),
+) -> None:
+    """Capture instant screen snapshot and run comprehensive visual error and activity analysis."""
+    import time
+    storage = CompanionStorage()
+    cfg = storage.load_config()
+    cfg.screen.enabled = True
+    observer = ScreenObservationEngine(config=cfg.screen)
+    analyzer = VisionAnalyzer(config=cfg.screen)
+
+    img, report = observer.capture_screen()
+    analyzed = analyzer.analyze(img, report) if img else report
+
+    save_path_str = "Not saved"
+    if save and img:
+        snap_dir = cfg.storage_directory / "screenshots"
+        snap_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"snapshot_{int(time.time())}.png"
+        full_path = snap_dir / filename
+        img.save(full_path)
+        save_path_str = str(full_path)
+
+    table = Table(title="📸 Instant Screen Snapshot & Analysis", border_style="magenta")
+    table.add_column("Field", style="bold cyan")
+    table.add_column("Observation Details", style="white")
+
+    table.add_row("Active Window", analyzed.window_title)
+    table.add_row("Process Name", analyzed.process_name)
+    table.add_row("Application Category", analyzed.app_category)
+    table.add_row("Activity Classification", analyzed.activity_category.value.upper())
+    table.add_row("Visual Change Ratio", f"{analyzed.change_ratio * 100:.1f}%")
+    table.add_row("Snapshot Path", save_path_str)
+    table.add_row("Summary / OCR", analyzed.visible_summary or "Workspace inspected.")
+
+    if analyzed.visible_error:
+        table.add_row("Detected Error", f"[bold red]{analyzed.visible_error}[/bold red]")
+
+    console.print(table)
 
 
 # =============================================================================

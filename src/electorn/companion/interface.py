@@ -33,10 +33,15 @@ class CompanionInterface:
         self.supervisor.on_message_cb = self._add_message
 
     def _add_message(self, speaker: str, content: str) -> None:
-        """Append a dialogue entry to the active chat log."""
+        """Append a dialogue entry to the active chat log and render to console if session is active."""
         self.messages.append((speaker, content))
         if len(self.messages) > 100:
             self.messages = self.messages[-100:]
+        if self._running:
+            if speaker == self.supervisor.config.personality.name:
+                console.print(f"\n[bold magenta]💖 {speaker}:[/bold magenta] {content}\n")
+            else:
+                console.print(f"\n[bold cyan]👤 {speaker}:[/bold cyan] {content}\n")
 
     def build_dashboard(self) -> Panel:
         """Construct the Rich visual dashboard layout."""
@@ -118,8 +123,8 @@ class CompanionInterface:
         # Ensure live screen is enabled
         self.supervisor.config.screen.enabled = True
         self.supervisor.screen_observer.config.enabled = True
+        self.supervisor.state.interactive_session_active = True
         self.supervisor.start()
-        self._running = True
 
         console.clear()
         console.print(Panel(
@@ -138,11 +143,12 @@ class CompanionInterface:
         except Exception:
             pass
 
+        console.print(self.build_dashboard())
+        self._running = True
+
         # Initial greeting aloud
         greeting = self.supervisor.personality.generate_greeting()
         self._add_message(self.supervisor.config.personality.name, greeting)
-        console.print(self.build_dashboard())
-        console.print(f"\n[bold magenta]💖 {self.supervisor.config.personality.name}:[/bold magenta] {greeting}\n")
 
         if self.supervisor.config.voice_enabled and not self.supervisor.state.is_muted and self.supervisor.state.active_mode != CompanionMode.PRIVACY:
             self.supervisor.voice.speak_async(greeting)
@@ -214,7 +220,8 @@ class CompanionInterface:
                         reply = self.supervisor.process_user_input(voice_text)
                         console.print(f"[bold magenta]💖 {self.supervisor.config.personality.name}:[/bold magenta] {reply}\n")
                     else:
-                        # Brief sleep to yield CPU before next mic turn
+                        # User is quiet: evaluate autonomous conversation check-ins
+                        self.supervisor.check_and_trigger_proactive()
                         time.sleep(0.1)
                 else:
                     # In privacy or muted mode, fall back to typed prompt
@@ -224,6 +231,7 @@ class CompanionInterface:
                             break
 
         finally:
+            self.supervisor.state.interactive_session_active = False
             self.supervisor.stop()
 
     def _handle_text_input(self, user_input: str) -> bool:

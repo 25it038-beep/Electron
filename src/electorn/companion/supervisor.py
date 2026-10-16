@@ -193,7 +193,7 @@ class CompanionSupervisor:
         """Periodically captures active window context if authorized."""
         while self._running:
             try:
-                interval = max(5, self.config.screen.interval_seconds)
+                interval = max(3, self.config.screen.interval_seconds)
                 time.sleep(interval)
 
                 if self.state.is_paused or not self.screen_observer.config.enabled:
@@ -206,6 +206,11 @@ class CompanionSupervisor:
                 img, report = self.screen_observer.capture_screen()
                 self.state.active_window_title = report.window_title
                 self.state.current_activity = report.activity_category
+
+                # Check application switch proactive event
+                app_evt = self.scheduler.check_app_switch_event(report)
+                if app_evt:
+                    self._handle_proactive_event(app_evt)
 
                 if img is not None:
                     # Run vision analyzer
@@ -230,22 +235,33 @@ class CompanionSupervisor:
         """Periodically checks bedtime stages, break milestones, and idle check-ins."""
         while self._running:
             try:
-                time.sleep(15)
+                time.sleep(5)
                 if self.state.is_paused or self.state.active_mode in (CompanionMode.PRIVACY, CompanionMode.PASSIVE):
                     continue
 
-                # 1. Check bedtime stages
-                bed_evt = self.scheduler.check_bedtime_event()
-                if bed_evt:
-                    self._handle_proactive_event(bed_evt)
-
-                # 2. Check time milestones
-                time_evt = self.scheduler.check_time_based_events()
-                if time_evt:
-                    self._handle_proactive_event(time_evt)
+                self.check_and_trigger_proactive()
 
             except Exception as e:
                 logger.debug("Error in proactive scheduler loop: %s", e)
+
+    def check_and_trigger_proactive(self) -> Optional[ProactiveEvent]:
+        """Perform prompt evaluation of bedtime and idle check-ins and trigger speech if due."""
+        if not self._running or self.state.is_paused or self.state.active_mode in (CompanionMode.PRIVACY, CompanionMode.PASSIVE):
+            return None
+
+        # 1. Check bedtime stages
+        bed_evt = self.scheduler.check_bedtime_event()
+        if bed_evt:
+            self._handle_proactive_event(bed_evt)
+            return bed_evt
+
+        # 2. Check time milestones / autonomous idle check-in
+        time_evt = self.scheduler.check_time_based_events()
+        if time_evt:
+            self._handle_proactive_event(time_evt)
+            return time_evt
+
+        return None
 
     def _handle_proactive_event(self, evt: ProactiveEvent) -> None:
         """Formulate speech and deliver proactive event if conditions permit."""

@@ -134,15 +134,19 @@ class StartupConfig(BaseModel):
 class ProactiveSpeechConfig(BaseModel):
     """Fine-grained controls over unsolicited proactive messages."""
     enabled: bool = True
-    max_per_hour: int = 4
-    min_interval_seconds: int = 600              # Minimum 10 minutes between unsolicited proactive statements
-    daily_limit: int = 35
+    max_per_hour: int = 30                       # Up to 30 proactive check-ins per hour in companion mode
+    min_interval_seconds: int = 75               # Natural ~1-2 min conversational pacing
+    idle_check_in_seconds: int = 90              # Proactively initiate conversation if user is silent for 90s
+    daily_limit: int = 150
+    app_switch_commentary: bool = True           # Proactively comment on application transitions
+    screen_commentary: bool = True               # Proactively comment on screen progress or errors
+    allow_active_quiet_hours_override: bool = True # Allow conversational remarks when user is actively at computer
 
 
 class ScreenObservationConfig(BaseModel):
     """Configuration for privacy-preserving screen observation."""
     enabled: bool = True                         # Live screen observation active by default
-    interval_seconds: int = 15                   # Capture frequency
+    interval_seconds: int = 5                    # Real-time capture frequency (5s)
     change_detection_threshold: float = 0.08     # 8% visual variance required before analyzing
     capture_active_window_only: bool = True      # Capture active foreground window instead of full desktop
     save_history: bool = False                   # In-memory only by default
@@ -241,6 +245,9 @@ class CompanionState(BaseModel):
     current_hour_window: int = Field(default_factory=lambda: datetime.now().hour)
     late_night_reminders_count: int = 0
     active_window_title: Optional[str] = None
+    last_observed_window: Optional[str] = None
+    last_observed_process: Optional[str] = None
+    interactive_session_active: bool = False
     current_activity: ActivityCategory = ActivityCategory.NEUTRAL
     activity_start_time: float = Field(default_factory=time.time)
     study_session_start_time: Optional[float] = None

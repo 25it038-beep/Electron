@@ -31,6 +31,8 @@ class ProactiveScheduler:
         self._last_bedtime_stage_spoken: Optional[str] = None
         self._last_distraction_spoken_time: float = 0.0
         self._last_user_return_spoken_time: float = 0.0
+        self._last_app_switch_spoken_time: float = 0.0
+        self._last_idle_spoken_time: float = 0.0
 
     def is_in_quiet_hours(self) -> bool:
         """Check if current system time falls within configured quiet hours."""
@@ -83,7 +85,13 @@ class ProactiveScheduler:
 
         # 8. Quiet hours check (permits security, user reminders, and bedtime reminders)
         if self.is_in_quiet_hours() and priority > 3:
-            return False
+            # If user is in an active interactive session or active COMPANION mode, allow conversational companion speech
+            if self.config.proactive.allow_active_quiet_hours_override and (
+                self.state.interactive_session_active or self.state.active_mode == CompanionMode.COMPANION
+            ):
+                pass
+            else:
+                return False
 
         # 9. Cooldown interval check
         last_speech = self.state.last_companion_speech_time or 0.0
@@ -91,16 +99,16 @@ class ProactiveScheduler:
 
         min_interval = self.config.proactive.min_interval_seconds
         if self.config.personality.conversation_frequency == ConversationFrequency.LOW:
-            min_interval = max(min_interval, 1800)  # 30 min minimum
+            min_interval = max(min_interval, 180)  # 3 min minimum
         elif self.config.personality.conversation_frequency == ConversationFrequency.HIGH:
-            min_interval = min(min_interval, 300)   # 5 min minimum
+            min_interval = min(min_interval, 45)   # 45 sec minimum
 
         # Priority 1 and 2 bypass cooldown
         if priority <= 2:
             return True
 
-        # Priority 3 (bedtime / deadlines) allow 120s cooldown
-        if priority == 3 and interval >= 120:
+        # Priority 3 (bedtime / deadlines) allow 60s cooldown
+        if priority == 3 and interval >= 60:
             return True
 
         return interval >= min_interval
@@ -192,6 +200,43 @@ class ProactiveScheduler:
 
         return None
 
+    def check_app_switch_event(self, report: ScreenObservationReport) -> Optional[ProactiveEvent]:
+        """Check if the user switched foreground application, triggering conversational curiosity."""
+        if not report or report.is_excluded or not self.config.proactive.app_switch_commentary:
+            return None
+
+        if self.state.active_mode not in (CompanionMode.COMPANION, CompanionMode.STUDY, CompanionMode.WORK_ASSISTANT):
+            return None
+
+        now = time.time()
+        cur_proc = (report.process_name or "").lower()
+        cur_title = report.window_title or ""
+        prev_proc = (self.state.last_observed_process or "").lower()
+        prev_title = self.state.last_observed_window or ""
+
+        changed = False
+        if cur_proc and prev_proc and cur_proc != prev_proc and cur_proc not in ("unknown", "desktop", "explorer.exe"):
+            changed = True
+        elif cur_title and prev_title and cur_title != prev_title and not prev_title.startswith("Unknown"):
+            changed = True
+
+        self.state.last_observed_process = cur_proc
+        self.state.last_observed_window = cur_title
+
+        if changed:
+            # Avoid frequent chatter: minimum 60s between app-switch remarks
+            if (now - self._last_app_switch_spoken_time) >= 60 and self.can_speak_proactively(priority=5):
+                self._last_app_switch_spoken_time = now
+                return ProactiveEvent(
+                    event_id=f"evt-{uuid.uuid4().hex[:8]}",
+                    event_type="app_switch",
+                    priority=5,
+                    title=report.window_title,
+                    details=report.app_category,
+                )
+
+        return None
+
     def check_time_based_events(self) -> Optional[ProactiveEvent]:
         """Check for session milestone break reminders or idle check-ins."""
         now = time.time()
@@ -209,19 +254,21 @@ class ProactiveScheduler:
                     details=f"Continuous session for {int(work_duration / 60)} minutes",
                 )
 
-        # 2. Idle check-in in Companion mode (quiet for 35 min)
+        # 2. Autonomous Idle check-in in Companion or Study mode (initiates conversation without user speaking)
         last_activity = max(
             self.state.last_user_speech_time or self.state.session_start_time,
             self.state.last_companion_speech_time or self.state.session_start_time,
         )
-        if (now - last_activity) >= 2100 and self.state.active_mode in (CompanionMode.COMPANION, CompanionMode.STUDY):
-            if self.can_speak_proactively(priority=6):
+        idle_thresh = self.config.proactive.idle_check_in_seconds
+        if (now - last_activity) >= idle_thresh and self.state.active_mode in (CompanionMode.COMPANION, CompanionMode.STUDY):
+            if (now - self._last_idle_spoken_time) >= idle_thresh and self.can_speak_proactively(priority=6):
+                self._last_idle_spoken_time = now
                 return ProactiveEvent(
                     event_id=f"evt-{uuid.uuid4().hex[:8]}",
                     event_type="check_in",
                     priority=6,
-                    title="Gentle check-in",
-                    details="User idle/quiet in companion mode",
+                    title="Spontaneous Check-in",
+                    details="Harshan idle in companion mode",
                 )
 
         return None

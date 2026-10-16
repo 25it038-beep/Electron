@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import time
 from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
@@ -242,6 +243,45 @@ def test_proactive_scheduler_hourly_rate_limit():
     assert sched.can_speak_proactively(priority=1) is True
 
 
+def test_proactive_scheduler_app_switch_event():
+    """Verify application switch triggers proactive event."""
+    cfg = CompanionConfig()
+    state = CompanionState(
+        active_mode=CompanionMode.COMPANION,
+        last_observed_process="chrome.exe",
+        last_observed_window="Google Chrome",
+    )
+    sched = ProactiveScheduler(cfg, state)
+    report = ScreenObservationReport(
+        window_title="main.py - Visual Studio Code",
+        process_name="code.exe",
+        app_category="code_editor",
+        activity_category=ActivityCategory.CODING,
+    )
+    evt = sched.check_app_switch_event(report)
+    assert evt is not None
+    assert evt.event_type == "app_switch"
+    assert "Visual Studio Code" in evt.title
+
+
+def test_proactive_scheduler_idle_checkin_event():
+    """Verify idle silence triggers autonomous conversation starter."""
+    cfg = CompanionConfig()
+    cfg.proactive.idle_check_in_seconds = 30
+    cfg.proactive.min_interval_seconds = 30
+    past = time.time() - 40
+    state = CompanionState(
+        active_mode=CompanionMode.COMPANION,
+        session_start_time=past,
+        last_user_speech_time=past,
+        last_companion_speech_time=past,
+    )
+    sched = ProactiveScheduler(cfg, state)
+    evt = sched.check_time_based_events()
+    assert evt is not None
+    assert evt.event_type == "check_in"
+
+
 # =============================================================================
 # 6. SUPERVISOR & VOICE COMMANDS TESTS
 # =============================================================================
@@ -386,6 +426,17 @@ def test_cli_screen_commands():
     res_ex = runner.invoke(companion_app, ["screen", "exclusions"])
     assert res_ex.exit_code == 0
     assert "bitwarden" in res_ex.output
+
+
+def test_cli_screen_live_and_snapshot():
+    """Verify screen live and snapshot commands run cleanly."""
+    res_live = runner.invoke(companion_app, ["screen", "live", "--count", "1", "--interval", "1"])
+    assert res_live.exit_code == 0
+    assert "Live Screen Frame #1" in res_live.output
+
+    res_snap = runner.invoke(companion_app, ["screen", "snapshot", "--no-save"])
+    assert res_snap.exit_code == 0
+    assert "Instant Screen Snapshot & Analysis" in res_snap.output
 
 
 def test_cli_startup_status():

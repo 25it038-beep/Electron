@@ -186,7 +186,8 @@ class ScreenObservationEngine:
                 except Exception:
                     try:
                         import mss
-                        with mss.mss() as sct:
+                        mss_factory = getattr(mss, "MSS", getattr(mss, "mss", None))
+                        with mss_factory() as sct:
                             monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
                             shot = sct.grab(monitor)
                             captured_image = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")

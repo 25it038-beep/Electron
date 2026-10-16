@@ -229,9 +229,56 @@ class PersonalityEngine:
         if event.event_type == "deadline":
             return f"{user}, a quick heads-up: you've got an upcoming deadline for '{event.title}'. Want to spend a little time preparing for it?"
 
-        # General Check-In
+        # Application Switch
+        if event.event_type == "app_switch":
+            cat = (event.details or "").lower()
+            title = event.title
+            if "code_editor" in cat:
+                options = [
+                    f"Back to the code, {user}! What feature are we working on now?",
+                    f"Ready to write some code, {user}? Let me know if you want me to watch for any bugs.",
+                    f"Back in the editor, {user}! Let's make some great progress.",
+                ]
+            elif "terminal" in cat:
+                options = [
+                    f"Opening terminal, {user}? Running some tests or building something?",
+                    f"Terminal's up, {user}! I'm keeping an eye out in case any errors pop up.",
+                ]
+            elif "browser" in cat:
+                options = [
+                    f"Switched to browser, {user}? Researching something or checking docs?",
+                    f"Looking something up online, {user}? Let me know if you need any summaries.",
+                ]
+            elif "communication" in cat:
+                options = [
+                    f"Checking messages, {user}? Let me know if you'd like me to help draft a quick reply.",
+                ]
+            elif "document" in cat:
+                options = [
+                    f"Opening documents, {user}? Let me know if you need notes organized.",
+                ]
+            else:
+                options = [
+                    f"I see you switched over to {title}, {user}. How's everything going?",
+                ]
+            return random.choice(options)
+
+        # Autonomous / Spontaneous Check-In (initiates conversation without user speaking)
         if event.event_type == "check_in":
-            return f"How is it coming along, {user}? You've been quiet for a bit, just wanted to check in."
+            options = [
+                f"How is everything coming along, {user}? You've been quiet for a bit, just wanted to check in.",
+                f"Hey {user}, what are you working on right now? I'm right here if you want to talk through anything.",
+                f"{user}, how is the project going? Still on track or hit any tricky spots?",
+                f"You're pretty focused today, {user}! Remember to relax your neck and shoulders a little bit.",
+                f"Hey {user}, need a quick water or coffee break, or are you deep in the zone?",
+            ]
+            if self.config.code_switch_tamil:
+                options.extend([
+                    f"Work eppadi pogudhu {user}? Yedhavadhu help venuma?",
+                    f"{user}, romba silent-a irukeenga! Progress nalla irukka?",
+                    f"Konjam rest eduthukonga {user}, water kudinga.",
+                ])
+            return random.choice(options)
 
         return event.suggested_speech or f"{user}, {event.title}."
 
