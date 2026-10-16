@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 from electorn.companion.activity_classifier import ActivityClassifier
 from electorn.companion.cli import companion_app
+from electorn.companion.interface import CompanionInterface
 from electorn.companion.memory import MemoryEngine
 from electorn.companion.personality import PersonalityEngine
 from electorn.companion.proactive_scheduler import ProactiveScheduler
@@ -369,6 +370,36 @@ def test_cli_companion_status():
     assert result.exit_code == 0
     assert "Electorn Companion Status" in result.output
     assert "Harshan" in result.output
+
+
+def test_cli_companion_unified_callback_status():
+    """Verify unified single command electorn companion --status works seamlessly."""
+    result = runner.invoke(companion_app, ["--status"])
+    assert result.exit_code == 0
+    assert "Electorn Companion Status" in result.output
+
+
+def test_companion_interface_in_session_commands(tmp_path: Path):
+    """Verify all companion controls work inside the unified interactive session."""
+    cfg = CompanionConfig(storage_directory=tmp_path)
+    supervisor = CompanionSupervisor(config=cfg)
+    ui = CompanionInterface(supervisor=supervisor)
+
+    assert ui._handle_text_input("/status") is True
+    assert ui._handle_text_input("/help") is True
+    assert ui._handle_text_input("/snap") is True
+    assert ui._handle_text_input("/tamil") is True
+    assert supervisor.config.personality.code_switch_tamil is False
+    assert ui._handle_text_input("/proactive off") is True
+    assert supervisor.config.proactive.enabled is False
+    assert ui._handle_text_input("/proactive on") is True
+    assert supervisor.config.proactive.enabled is True
+    assert ui._handle_text_input("/bedtime 22:45") is True
+    assert supervisor.config.bedtime.bedtime == "22:45"
+    assert ui._handle_text_input("/memory add color=blue") is True
+    assert ui._handle_text_input("/memory list") is True
+    assert ui._handle_text_input("/focus") is True
+    assert supervisor.state.active_mode == CompanionMode.FOCUS
 
 
 def test_cli_companion_modes():

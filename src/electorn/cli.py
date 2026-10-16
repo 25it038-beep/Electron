@@ -79,6 +79,17 @@ from electorn.companion.cli import companion_app
 app.add_typer(companion_app)
 
 
+@app.command(name="live", help="Launch all-in-one Electorn AI Companion (voice, live screen, autonomous conversation).")
+def live_command(
+    mode: Optional[str] = typer.Option(None, "--mode", "-m", help="companion, focus, study, night, passive, privacy"),
+    screen: Optional[bool] = typer.Option(None, "--screen/--no-screen", help="Enable/disable screen observation"),
+    voice: Optional[bool] = typer.Option(None, "--voice/--no-voice", help="Enable/disable voice speech"),
+) -> None:
+    """Launch the unified all-in-one AI companion directly."""
+    from electorn.companion.cli import start_cmd
+    start_cmd(mode=mode, screen=screen, voice=voice)
+
+
 
 from electorn.audio import play_intro_audio
 

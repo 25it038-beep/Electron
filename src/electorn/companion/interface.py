@@ -13,7 +13,7 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 
-from electorn.companion.schema import CompanionLifecycleState, CompanionMode, CompanionState
+from electorn.companion.schema import CompanionLifecycleState, CompanionMode, CompanionState, MemoryCategory
 from electorn.companion.supervisor import CompanionSupervisor
 from electorn.companion.time_engine import TimeAwarenessEngine
 
@@ -118,6 +118,64 @@ class CompanionInterface:
             else:
                 console.print(f"[bold green]👤 {speaker}:[/bold green] {text}")
 
+    def take_instant_snapshot(self) -> None:
+        """Capture screen now, run vision analysis, and display results in console."""
+        console.print("\n[dim cyan]📸 Capturing active screen...[/dim cyan]")
+        try:
+            img, report = self.supervisor.screen_observer.capture_screen()
+            analyzed = self.supervisor.vision_analyzer.analyze(img, report) if img else report
+
+            save_path_str = "In-memory only"
+            if img:
+                snap_dir = self.supervisor.config.storage_directory / "screenshots"
+                snap_dir.mkdir(parents=True, exist_ok=True)
+                filename = f"snapshot_{int(time.time())}.png"
+                full_path = snap_dir / filename
+                img.save(full_path)
+                save_path_str = str(full_path)
+
+            table = Table(title="📸 Instant Screen Snapshot & Vision Analysis", border_style="magenta")
+            table.add_column("Property", style="bold cyan")
+            table.add_column("Details", style="white")
+
+            table.add_row("Active Window", analyzed.window_title)
+            table.add_row("Process Name", analyzed.process_name)
+            table.add_row("Category", analyzed.app_category)
+            table.add_row("Activity", f"[bold green]{analyzed.activity_category.value.upper()}[/bold green]")
+            table.add_row("Visual Change", f"{analyzed.change_ratio * 100:.1f}%")
+            table.add_row("Saved Snapshot", save_path_str)
+            table.add_row("Visual Summary", analyzed.visible_summary or "Inspecting visual workspace...")
+            if analyzed.visible_error:
+                table.add_row("Detected Error", f"[bold red]{analyzed.visible_error}[/bold red]")
+
+            console.print(table)
+            console.print("")
+        except Exception as e:
+            console.print(f"[red]Failed to capture screen: {e}[/red]\n")
+
+    def display_help(self) -> None:
+        """Render help panel for keyboard hotkeys and slash commands."""
+        table = Table(title="💖 Electorn Companion Commands & Hotkeys", border_style="cyan")
+        table.add_column("Key / Command", style="bold cyan")
+        table.add_column("Action", style="white")
+
+        table.add_row("T / Enter", "Type a message or slash command")
+        table.add_row("S", "Take instant screen snapshot & run vision analysis")
+        table.add_row("M", "Mute or unmute microphone")
+        table.add_row("P", "Pause or resume companion speech")
+        table.add_row("D", "Redisplay status dashboard")
+        table.add_row("H / ?", "Show this command cheat sheet")
+        table.add_row("Q / Esc", "Quit companion session cleanly")
+        table.add_row("/focus, /study, /night, /companion, /privacy", "Switch companion operating modes")
+        table.add_row("/snap, /snapshot", "Capture and analyze current screen")
+        table.add_row("/status", "Display full status table")
+        table.add_row("/tamil", "Toggle Tamil-English code-switching")
+        table.add_row("/proactive on|off", "Toggle autonomous conversation triggers")
+        table.add_row("/memory list|add <k> <v>", "View or store companion memories")
+        table.add_row("/bedtime <HH:MM>", "Set target bedtime")
+        table.add_row("/snooze", "Snooze bedtime reminder for 30 minutes")
+        console.print("\n", table, "\n")
+
     def run_interactive_session(self) -> None:
         """Start the live companion interaction loop with hands-free voice and live screen access."""
         # Ensure live screen is enabled
@@ -128,9 +186,9 @@ class CompanionInterface:
 
         console.clear()
         console.print(Panel(
-            f"[bold magenta]⚡ ELECTORN COMPANION MODE[/bold magenta] — Persistent Voice & Screen-Aware AI (Aria)\n"
+            f"[bold magenta]⚡ ELECTORN AI COMPANION[/bold magenta] — All-in-One Voice, Screen & Autonomous AI (Aria)\n"
             f"[dim]Addressing: [bold]{self.supervisor.config.personality.user_name}[/bold] | Live Screen: [bold green]ACTIVE[/bold green] | Live Voice: [bold green]ACTIVE[/bold green]\n"
-            f"Voice: Speak naturally into your mic at any time. Press [bold]T[/bold] to type, [bold]M[/bold] to mute, [bold]Q[/bold] to quit.[/dim]",
+            f"Voice: Speak naturally at any time. Hotkeys: [bold]T[/bold]=Type • [bold]S[/bold]=Snapshot • [bold]M[/bold]=Mute • [bold]P[/bold]=Pause • [bold]D[/bold]=Dashboard • [bold]H[/bold]=Help • [bold]Q[/bold]=Quit[/dim]",
             border_style="magenta",
         ))
 
@@ -178,6 +236,15 @@ class CompanionInterface:
                                 else:
                                     self.supervisor.pause()
                                     console.print("\n[yellow]⏸️ Companion paused.[/yellow]\n")
+                                continue
+                            elif ch in (b's', b'S'):
+                                self.take_instant_snapshot()
+                                continue
+                            elif ch in (b'd', b'D'):
+                                console.print(self.build_dashboard())
+                                continue
+                            elif ch in (b'h', b'H', b'?'):
+                                self.display_help()
                                 continue
                             elif ch in (b't', b'T', b'\r'):
                                 user_typed = Prompt.ask("\n[bold cyan]Type message or command[/bold cyan]").strip()
@@ -296,6 +363,69 @@ class CompanionInterface:
             self.supervisor.screen_observer.config.enabled = self.supervisor.config.screen.enabled
             status = "ENABLED" if self.supervisor.config.screen.enabled else "DISABLED"
             console.print(f"[cyan]Screen observation {status}.[/cyan]\n")
+            return True
+
+        if lower in ("/snap", "/snapshot", "snap", "snapshot"):
+            self.take_instant_snapshot()
+            return True
+
+        if lower in ("/status", "/dashboard", "status", "dashboard"):
+            console.print(self.build_dashboard())
+            return True
+
+        if lower in ("/help", "/?", "help"):
+            self.display_help()
+            return True
+
+        if lower in ("/tamil", "tamil"):
+            self.supervisor.config.personality.code_switch_tamil = not self.supervisor.config.personality.code_switch_tamil
+            status = "ENABLED" if self.supervisor.config.personality.code_switch_tamil else "DISABLED"
+            console.print(f"[magenta]Tamil code-switching {status}.[/magenta]\n")
+            return True
+
+        if lower.startswith("/proactive") or lower.startswith("proactive"):
+            parts = lower.split()
+            if len(parts) > 1 and parts[1] == "off":
+                self.supervisor.config.proactive.enabled = False
+            elif len(parts) > 1 and parts[1] == "on":
+                self.supervisor.config.proactive.enabled = True
+            else:
+                self.supervisor.config.proactive.enabled = not self.supervisor.config.proactive.enabled
+            status = "ENABLED" if self.supervisor.config.proactive.enabled else "DISABLED"
+            console.print(f"[cyan]Proactive speech {status}.[/cyan]\n")
+            return True
+
+        if lower.startswith("/bedtime") or lower.startswith("bedtime"):
+            parts = user_input.strip().split()
+            if len(parts) > 1:
+                self.supervisor.config.bedtime.bedtime = parts[1]
+                console.print(f"[yellow]Bedtime set to {parts[1]}.[/yellow]\n")
+            else:
+                console.print(f"[yellow]Current target bedtime: {self.supervisor.config.bedtime.bedtime}[/yellow]\n")
+            return True
+
+        if lower.startswith("/memory") or lower.startswith("/mem"):
+            parts = user_input.strip().split(maxsplit=2)
+            if len(parts) > 1 and parts[1].lower() == "list":
+                items = self.supervisor.memory.load_all()
+                if not items:
+                    console.print("[yellow]No memories saved yet.[/yellow]\n")
+                else:
+                    console.print(f"[cyan]Memories ({len(items)} items):[/cyan]")
+                    for it in items:
+                        console.print(f"  • {it.key}: {it.value}")
+                    console.print("")
+            elif len(parts) > 2 and parts[1].lower() == "add":
+                val_parts = parts[2].split("=", 1)
+                k = val_parts[0].strip()
+                v = val_parts[1].strip() if len(val_parts) > 1 else ""
+                if k and v:
+                    self.supervisor.memory.add_memory(category=MemoryCategory.USER_PREFERENCE, key=k, value=v)
+                    console.print(f"[green]Saved memory: {k} = {v}[/green]\n")
+                else:
+                    console.print("[yellow]Usage: /memory add <key>=<value>[/yellow]\n")
+            else:
+                console.print("[dim]Usage: /memory list or /memory add key=value[/dim]\n")
             return True
 
         # Process message

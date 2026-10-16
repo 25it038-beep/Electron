@@ -53,10 +53,19 @@ console = Console(legacy_windows=False)
 
 
 @companion_app.callback(invoke_without_command=True)
-def companion_default_callback(ctx: typer.Context) -> None:
-    """Launch interactive session if invoked without subcommands."""
+def companion_default_callback(
+    ctx: typer.Context,
+    mode: Optional[str] = typer.Option(None, "--mode", "-m", help="companion, focus, study, night, passive, privacy"),
+    screen: Optional[bool] = typer.Option(None, "--screen/--no-screen", help="Enable/disable screen observation"),
+    voice: Optional[bool] = typer.Option(None, "--voice/--no-voice", help="Enable/disable voice speech"),
+    status: bool = typer.Option(False, "--status", help="Show companion status and exit"),
+) -> None:
+    """Launch the unified all-in-one Electorn AI Companion (Voice, Screen, Autonomous Conversation)."""
     if ctx.invoked_subcommand is None:
-        start_cmd()
+        if status:
+            status_cmd()
+            return
+        start_cmd(mode=mode, screen=screen, voice=voice)
 
 
 # =============================================================================
@@ -64,6 +73,7 @@ def companion_default_callback(ctx: typer.Context) -> None:
 # =============================================================================
 
 @companion_app.command(name="start", help="Start the persistent companion voice and screen session.")
+@companion_app.command(name="run", help="Start the persistent companion voice and screen session.")
 def start_cmd(
     mode: Optional[str] = typer.Option(None, "--mode", "-m", help="companion, focus, study, night, passive, privacy"),
     screen: Optional[bool] = typer.Option(None, "--screen", help="Enable/disable screen observation"),
