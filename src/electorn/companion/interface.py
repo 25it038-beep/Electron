@@ -176,6 +176,29 @@ class CompanionInterface:
         table.add_row("/snooze", "Snooze bedtime reminder for 30 minutes")
         console.print("\n", table, "\n")
 
+    def _wait_for_companion_speech(self) -> None:
+        """Wait for companion speech to finish while keeping UI responsive and allowing user interruption."""
+        time.sleep(0.1)
+        while self.supervisor.voice.is_speaking() and self._running:
+            if sys.platform == "win32":
+                try:
+                    import msvcrt
+                    if msvcrt.kbhit():
+                        ch = msvcrt.getch()
+                        self.supervisor.voice.interrupt_speech()
+                        if ch in (b'q', b'Q', b'\x1b'):
+                            self._running = False
+                            return
+                        elif ch in (b'm', b'M'):
+                            is_mut = self.supervisor.voice.toggle_mute()
+                            self.supervisor.state.is_muted = is_mut
+                            status_txt = "MUTED" if is_mut else "UNMUTED"
+                            console.print(f"\n[yellow]Microphone {status_txt}.[/yellow]\n")
+                        break
+                except Exception:
+                    pass
+            time.sleep(0.05)
+
     def run_interactive_session(self) -> None:
         """Start the live companion interaction loop with hands-free voice and live screen access."""
         # Ensure live screen is enabled
@@ -210,6 +233,7 @@ class CompanionInterface:
 
         if self.supervisor.config.voice_enabled and not self.supervisor.state.is_muted and self.supervisor.state.active_mode != CompanionMode.PRIVACY:
             self.supervisor.voice.speak_async(greeting)
+            self._wait_for_companion_speech()
 
         try:
             while self._running:
@@ -286,6 +310,7 @@ class CompanionInterface:
                         console.print("[dim]Thinking...[/dim]")
                         reply = self.supervisor.process_user_input(voice_text)
                         console.print(f"[bold magenta]💖 {self.supervisor.config.personality.name}:[/bold magenta] {reply}\n")
+                        self._wait_for_companion_speech()
                     else:
                         # User is quiet: evaluate autonomous conversation check-ins
                         self.supervisor.check_and_trigger_proactive()
@@ -433,4 +458,5 @@ class CompanionInterface:
         console.print("[dim]Thinking...[/dim]")
         reply = self.supervisor.process_user_input(user_input)
         console.print(f"[bold magenta]💖 {self.supervisor.config.personality.name}:[/bold magenta] {reply}\n")
+        self._wait_for_companion_speech()
         return True

@@ -126,6 +126,13 @@ class CompanionVoiceSession:
         self._speech_thread = t
         t.start()
 
+    def wait_for_speech(self, timeout: float = 30.0, poll_interval: float = 0.05) -> bool:
+        """Wait until active speech playback finishes or timeout is reached."""
+        start = time.time()
+        while self._is_speaking and (time.time() - start < timeout):
+            time.sleep(poll_interval)
+        return not self._is_speaking
+
     def listen_for_user(
         self,
         timeout_seconds: float = 5.0,
@@ -136,9 +143,9 @@ class CompanionVoiceSession:
         if self._is_muted or not self.engine.is_supported():
             return None
 
-        # Check for interrupt during user speech
-        if self._is_speaking and self.barge_in_enabled:
-            self.interrupt_speech()
+        # Ensure any active speech finishes cleanly so mic does not record speaker echo or self-abort
+        if self._is_speaking:
+            self.wait_for_speech(timeout=30.0)
 
         target_lang = language_override or self.language
 

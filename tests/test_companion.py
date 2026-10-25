@@ -505,3 +505,33 @@ def test_companion_tools_command_security():
     assert res["success"] is False
     assert "destructive" in res["output"].lower()
 
+
+def test_companion_voice_session_wait_for_speech():
+    """Verify wait_for_speech waits until is_speaking transitions to False."""
+    session = CompanionVoiceSession()
+    session._is_speaking = True
+
+    # Simulate speech finishing after a short delay in background
+    import threading
+    def _finish():
+        time.sleep(0.1)
+        session._is_speaking = False
+
+    threading.Thread(target=_finish).start()
+    finished = session.wait_for_speech(timeout=2.0)
+    assert finished is True
+    assert session.is_speaking() is False
+
+
+def test_companion_voice_session_listen_does_not_abort_speaking():
+    """Verify listen_for_user waits for speech rather than abruptly calling interrupt_speech."""
+    session = CompanionVoiceSession()
+    session._is_speaking = True
+    session.engine.is_supported = MagicMock(return_value=True)
+
+    with patch.object(session, "wait_for_speech", return_value=True) as mock_wait:
+        with patch.object(session.engine, "listen_and_transcribe", return_value="hello"):
+            result = session.listen_for_user()
+            mock_wait.assert_called_once_with(timeout=30.0)
+            assert result == "hello"
+

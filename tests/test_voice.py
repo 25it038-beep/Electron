@@ -35,6 +35,24 @@ def test_sanitize_text_truncates_excessive_sentences():
     assert "The full details are displayed on your screen." in clean
 
 
+def test_sanitize_text_preserves_decimals_and_abbreviations():
+    text = "Hello Harshan, Python 3.10 is installed. Let us check the status. System load is 15.5%. All tests pass."
+    clean = VoiceEngine._sanitize_text_for_speech(text)
+    assert "Python 3.10" in clean
+    assert "15.5%" in clean
+    assert "All tests pass." in clean
+    assert "The full details are displayed" not in clean
+
+
+def test_sanitize_text_removes_glitchy_emojis():
+    text = "💖 Aria: ⚡ ELECTORN is ready! ▶️ Running smoothly."
+    clean = VoiceEngine._sanitize_text_for_speech(text)
+    assert "💖" not in clean
+    assert "⚡" not in clean
+    assert "▶" not in clean
+    assert "ELECTORN is ready!" in clean
+
+
 def test_speak_empty():
     engine = VoiceEngine()
     # Should safely return without invoking TTS or throwing errors

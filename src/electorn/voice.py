@@ -135,106 +135,107 @@ class VoiceEngine:
         def _tts_worker() -> None:
             with self._tts_lock:
                 self._is_speaking = True
-                success = False
+                try:
+                    success = False
 
-                # 1. Try Recent Neural Voice Model (Edge TTS)
-                if NEURAL_VOICE_AVAILABLE:
-                    try:
-                        lang_models = self.NEURAL_MODELS.get(target_lang, self.NEURAL_MODELS["en-US"])
-                        voice_model = lang_models.get(self.voice_gender, "en-US-AvaNeural")
-                        # Run edge-tts stream asynchronously
-                        audio_buffer = io.BytesIO()
-
-                        async def _stream_tts() -> None:
-                            communicate = edge_tts.Communicate(clean_text, voice_model)
-                            async for chunk in communicate.stream():
-                                if chunk["type"] == "audio":
-                                    audio_buffer.write(chunk["data"])
-
-                        # Run event loop for edge-tts
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
+                    # 1. Try Recent Neural Voice Model (Edge TTS)
+                    if NEURAL_VOICE_AVAILABLE:
                         try:
-                            loop.run_until_complete(_stream_tts())
-                        finally:
-                            loop.close()
+                            lang_models = self.NEURAL_MODELS.get(target_lang, self.NEURAL_MODELS["en-US"])
+                            voice_model = lang_models.get(self.voice_gender, "en-US-AvaNeural")
+                            # Run edge-tts stream asynchronously
+                            audio_buffer = io.BytesIO()
 
-                        audio_buffer.seek(0)
-                        if audio_buffer.getbuffer().nbytes > 0:
-                            data, fs = sf.read(audio_buffer)
-                            sd.play(data, fs)
-                            sd.wait()
+                            async def _stream_tts() -> None:
+                                communicate = edge_tts.Communicate(clean_text, voice_model)
+                                async for chunk in communicate.stream():
+                                    if chunk["type"] == "audio":
+                                        audio_buffer.write(chunk["data"])
+
+                            # Run event loop for edge-tts
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                loop.run_until_complete(_stream_tts())
+                            finally:
+                                loop.close()
+
+                            audio_buffer.seek(0)
+                            if audio_buffer.getbuffer().nbytes > 0:
+                                data, fs = sf.read(audio_buffer)
+                                sd.play(data, fs)
+                                sd.wait()
+                                success = True
+                        except Exception:
+                            success = False
+
+                    # 2. Fallback to Native Windows SAPI if neural failed or unavailable
+                    if not success and sys.platform == "win32":
+                        try:
+                            try:
+                                import pythoncom
+                                pythoncom.CoInitialize()
+                            except Exception:
+                                pass
+                            import win32com.client
+                            speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                            speaker.Rate = self.speech_speed
+
+                            # Configure voice based on preferred gender and language
+                            try:
+                                voices = speaker.GetVoices()
+                                selected_voice = None
+                                for i in range(voices.Count):
+                                    v = voices.Item(i)
+                                    desc = v.GetDescription().lower()
+                                    try:
+                                        g = v.GetAttribute("Gender").lower()
+                                    except Exception:
+                                        g = ""
+
+                                    if target_lang == "ta-IN":
+                                        if "tamil" in desc or "valluvar" in desc or "pallavi" in desc:
+                                            selected_voice = v
+                                            break
+
+                                    if self.voice_gender == "female":
+                                        if g == "female" or any(n in desc for n in ["zira", "female", "hazel", "eva", "susan", "helen"]):
+                                            selected_voice = v
+                                            break
+                                    else:
+                                        if g == "male" or any(n in desc for n in ["david", "male", "mark", "george"]):
+                                            selected_voice = v
+                                            break
+
+                                if selected_voice is not None:
+                                    speaker.Voice = selected_voice
+                            except Exception:
+                                pass
+
+                            speaker.Speak(clean_text)
+                            try:
+                                pythoncom.CoUninitialize()
+                            except Exception:
+                                pass
                             success = True
-                    except Exception:
-                        success = False
+                        except Exception:
+                            success = False
 
-                # 2. Fallback to Native Windows SAPI if neural failed or unavailable
-                if not success and sys.platform == "win32":
-                    try:
+                    # 3. Fallback for macOS / Linux
+                    if not success:
                         try:
-                            import pythoncom
-                            pythoncom.CoInitialize()
+                            import subprocess
+                            import shutil
+                            if shutil.which("say"):
+                                voice_opt = ["-v", "Samantha"] if self.voice_gender == "female" else ["-v", "Alex"]
+                                subprocess.run(["say"] + voice_opt + [clean_text], check=False)
+                            elif shutil.which("espeak"):
+                                voice_opt = ["-v", "en+f3"] if self.voice_gender == "female" else ["-v", "en+m3"]
+                                subprocess.run(["espeak"] + voice_opt + [clean_text], check=False)
                         except Exception:
                             pass
-                        import win32com.client
-                        speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                        speaker.Rate = self.speech_speed
-
-                        # Configure voice based on preferred gender and language
-                        try:
-                            voices = speaker.GetVoices()
-                            selected_voice = None
-                            for i in range(voices.Count):
-                                v = voices.Item(i)
-                                desc = v.GetDescription().lower()
-                                try:
-                                    g = v.GetAttribute("Gender").lower()
-                                except Exception:
-                                    g = ""
-
-                                if target_lang == "ta-IN":
-                                    if "tamil" in desc or "valluvar" in desc or "pallavi" in desc:
-                                        selected_voice = v
-                                        break
-
-                                if self.voice_gender == "female":
-                                    if g == "female" or any(n in desc for n in ["zira", "female", "hazel", "eva", "susan", "helen"]):
-                                        selected_voice = v
-                                        break
-                                else:
-                                    if g == "male" or any(n in desc for n in ["david", "male", "mark", "george"]):
-                                        selected_voice = v
-                                        break
-
-                            if selected_voice is not None:
-                                speaker.Voice = selected_voice
-                        except Exception:
-                            pass
-
-                        speaker.Speak(clean_text)
-                        try:
-                            pythoncom.CoUninitialize()
-                        except Exception:
-                            pass
-                        success = True
-                    except Exception:
-                        success = False
-
-                # 3. Fallback for macOS / Linux
-                if not success:
-                    try:
-                        import subprocess
-                        import shutil
-                        if shutil.which("say"):
-                            voice_opt = ["-v", "Samantha"] if self.voice_gender == "female" else ["-v", "Alex"]
-                            subprocess.run(["say"] + voice_opt + [clean_text], check=False)
-                        elif shutil.which("espeak"):
-                            voice_opt = ["-v", "en+f3"] if self.voice_gender == "female" else ["-v", "en+m3"]
-                            subprocess.run(["espeak"] + voice_opt + [clean_text], check=False)
-                    except Exception:
-                        pass
-
-                self._is_speaking = False
+                finally:
+                    self._is_speaking = False
 
         if async_mode:
             t = threading.Thread(target=_tts_worker, daemon=True)
@@ -322,15 +323,36 @@ class VoiceEngine:
         cleaned = re.sub(r"https?://\S+", "link on screen", text)
         # Remove triple backtick blocks
         cleaned = re.sub(r"```[\s\S]*?```", "Here is the code implementation displayed on your screen.", cleaned)
+        # Remove inline backticks
+        cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
         # Remove markdown symbols
-        cleaned = re.sub(r"[*_#`>]", "", cleaned)
-        # Limit spoken length if response is an essay
-        sentences = [s.strip() for s in re.split(r"[.!?।]+", cleaned) if s.strip()]
-        if len(sentences) > 4:
+        cleaned = re.sub(r"[*_#~|>]", " ", cleaned)
+        # Remove decorative emojis and symbols that can cause speech glitches
+        cleaned = re.sub(r"[\U00010000-\U0010ffff]", "", cleaned)
+        cleaned = re.sub(r"[\u2000-\u2bff]", "", cleaned)
+        cleaned = re.sub(r"[\ufe00-\ufe0f\u200b-\u200f]", "", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+        # Protect decimal numbers (e.g. 3.10, 15.5) and abbreviations from breaking mid-sentence
+        protected = re.sub(r"(\d+)\.(\d+)", r"\1<DECIMAL_DOT>\2", cleaned)
+        protected = re.sub(r"\b(e\.g|i\.e|vs|dr|mr|mrs|ms|prof|inc|ltd)\.", r"\1<ABBR_DOT>", protected, flags=re.IGNORECASE)
+
+        # Split on sentence boundaries preserving closing punctuation
+        parts = [
+            s.replace("<DECIMAL_DOT>", ".").replace("<ABBR_DOT>", ".").strip()
+            for s in re.split(r"(?<=[.!?।])\s+", protected)
+            if s.strip()
+        ]
+
+        # Truncate only if truly excessive (> 4 full sentences)
+        if len(parts) > 4:
             if cls.is_tamil_text(cleaned):
-                cleaned = ". ".join(sentences[:4]) + ". கூடுதல் தகவல்கள் உங்கள் திரையில் காட்டப்பட்டுள்ளன."
+                cleaned = " ".join(parts[:4]) + " கூடுதல் தகவல்கள் உங்கள் திரையில் காட்டப்பட்டுள்ளன."
             else:
-                cleaned = ". ".join(sentences[:4]) + ". The full details are displayed on your screen."
+                cleaned = " ".join(parts[:4]) + " The full details are displayed on your screen."
+        else:
+            cleaned = " ".join(parts) if parts else cleaned
+
         return cleaned.strip()
 
 
