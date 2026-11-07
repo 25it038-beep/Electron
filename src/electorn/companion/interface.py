@@ -178,6 +178,7 @@ class CompanionInterface:
         table.add_row("/memory list|add <k> <v>", "View or store companion memories")
         table.add_row("/bedtime <HH:MM>", "Set target bedtime")
         table.add_row("/snooze", "Snooze bedtime reminder for 30 minutes")
+        table.add_row("Device Control", "Voice: 'Check GPU', 'Set volume 50%', 'Check Wi-Fi', 'Why is my laptop slow', 'Lock PC'")
         console.print("\n", table, "\n")
 
     def _wait_for_companion_speech(self) -> None:

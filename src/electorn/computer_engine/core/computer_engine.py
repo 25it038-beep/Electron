@@ -9,6 +9,16 @@ from electorn.computer_engine.controllers.keyboard_controller import KeyboardCon
 from electorn.computer_engine.controllers.clipboard_controller import ClipboardController
 from electorn.computer_engine.controllers.screen_controller import ScreenController
 from electorn.computer_engine.controllers.window_controller import WindowController
+from electorn.computer_engine.controllers.display_controller import DisplayController
+from electorn.computer_engine.controllers.audio_controller import AudioController
+from electorn.computer_engine.controllers.camera_controller import CameraController
+from electorn.computer_engine.controllers.network_controller import NetworkController
+from electorn.computer_engine.controllers.bluetooth_controller import BluetoothController
+from electorn.computer_engine.controllers.storage_controller import StorageController
+from electorn.computer_engine.controllers.power_controller import PowerController
+from electorn.computer_engine.controllers.system_admin import SystemAdminController
+from electorn.computer_engine.controllers.troubleshooter import DeviceTroubleshooter
+from electorn.computer_engine.controllers.device_inventory import DeviceInventory
 
 from electorn.computer_engine.perception.screen_analyzer import ScreenAnalyzer
 from electorn.computer_engine.perception.element_detector import UIElementDetector
@@ -46,6 +56,16 @@ class ComputerEngine:
         self.clipboard = ClipboardController()
         self.screen = ScreenController()
         self.window = WindowController()
+        self.display = DisplayController()
+        self.audio = AudioController()
+        self.camera = CameraController()
+        self.network = NetworkController()
+        self.bluetooth = BluetoothController()
+        self.storage = StorageController()
+        self.power = PowerController()
+        self.system_admin = SystemAdminController()
+        self.troubleshooter = DeviceTroubleshooter()
+        self.inventory = DeviceInventory()
 
         # Perception
         self.analyzer = ScreenAnalyzer()

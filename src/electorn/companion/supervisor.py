@@ -434,16 +434,115 @@ class CompanionSupervisor:
             self.computer_engine.keyboard.paste()
             return f'Pasted from clipboard, {user}.'
 
-        # Windows Device & System Controls
+        # =====================================================================
+        # UNIVERSAL DEVICE CONTROL (AUDC): DISPLAY, GPU, AUDIO, NETWORK, POWER
+        # =====================================================================
+
+        # Display Brightness
         b_match = re.search(r'(?:set|change|adjust)\s+(?:my\s+)?brightness(?:\s+to)?\s+(\d{1,3})%?', lower)
         if b_match:
             val = int(b_match.group(1))
+            self.computer_engine.display.set_brightness(val)
             return f"I've adjusted your display brightness to {val}%, {user}."
 
+        if any(w in lower for w in ('check brightness', 'what is my brightness', 'brightness level')):
+            b_info = self.computer_engine.display.get_brightness()
+            val = b_info.get("brightness", 100)
+            return f"Current display brightness is {val}%, {user}."
+
+        # NVIDIA GPU Real-Time Telemetry
+        if any(w in lower for w in ('check gpu', 'gpu status', 'nvidia status', 'gpu temperature', 'gpu load')):
+            gpu_res = self.computer_engine.display.get_gpu_info()
+            if gpu_res.get("has_nvidia") and gpu_res.get("gpus"):
+                g = gpu_res["gpus"][0]
+                procs = [p["process_name"].split("\\")[-1] for p in gpu_res.get("processes", [])[:3]]
+                proc_str = f" Running: {', '.join(procs)}." if procs else ""
+                return (
+                    f"{user}, your {g['name']} is at {g['temperature_c']}°C with {g['utilization_percent']}% load. "
+                    f"VRAM: {round(g['memory_used_mb']/1024, 1)}GB / {round(g['memory_total_mb']/1024, 1)}GB used.{proc_str}"
+                )
+            return f"{user}, no dedicated NVIDIA GPU was detected via nvidia-smi. System is utilizing integrated graphics."
+
+        # Screen & Display Info
+        if any(w in lower for w in ('screen resolution', 'display resolution', 'monitor specs', 'display info')):
+            disp = self.computer_engine.display.get_display_info()
+            ctrls = disp.get("controllers", [])
+            if ctrls and ctrls[0].get("width"):
+                c = ctrls[0]
+                return f"Your primary display is {c['name']} running at {c['width']}x{c['height']} @ {c.get('refresh_rate', 60)}Hz, {user}."
+            p_res = disp.get("primary_resolution")
+            if p_res:
+                return f"Your primary screen resolution is {p_res['width']}x{p_res['height']}, {user}."
+            return f"Retrieved display telemetry for {disp.get('count', 1)} monitor(s), {user}."
+
+        # Audio Volume & Mute
         v_match = re.search(r'(?:set|change|adjust)\s+(?:my\s+)?volume(?:\s+to)?\s+(\d{1,3})%?', lower)
         if v_match:
             val = int(v_match.group(1))
+            self.computer_engine.audio.set_volume(val)
             return f"I've adjusted your system volume to {val}%, {user}."
+
+        if any(w in lower for w in ('unmute audio', 'unmute sound', 'unmute laptop', 'unmute speakers', 'unmute')):
+            self.computer_engine.audio.set_mute(False)
+            return f"Master audio is now unmuted, {user}."
+
+        if any(w in lower for w in ('mute audio', 'mute sound', 'mute laptop', 'mute speakers')) and 'unmute' not in lower:
+            self.computer_engine.audio.set_mute(True)
+            return f"Master audio is now muted, {user}."
+        if any(w in lower for w in ('check volume', 'what is the volume', 'audio level')):
+            vol_data = self.computer_engine.audio.get_volume()
+            return f"System volume is currently at {vol_data.get('volume', 50)}% (Muted: {vol_data.get('muted', False)}), {user}."
+
+        # Audio & Microphone Diagnostics
+        if any(w in lower for w in ('why my microphone is not working', 'check my microphone', 'microphone status', 'mic status', 'troubleshoot audio')):
+            diag = self.computer_engine.audio.troubleshoot_audio()
+            if diag.get("issues"):
+                return f"{user}, audio diagnostic found: {diag['issues'][0]} Recommended fix: {diag['recommended_actions'][0]}"
+            return f"{user}, your audio system and default input device are detected and operational. Audio levels are normal."
+
+        # Camera & Webcam Diagnostics
+        if any(w in lower for w in ('check webcam', 'check camera', 'camera status', 'is camera working')):
+            cam = self.computer_engine.camera.check_camera_health()
+            if cam.get("healthy"):
+                return f"{user}, your camera '{cam.get('primary_camera') or 'Webcam'}' is connected and ready."
+            return f"{user}, camera health check: {cam['issues'][0] if cam.get('issues') else 'No active camera detected.'}"
+
+        # Network & Wi-Fi Telemetry
+        if any(w in lower for w in ('check wifi', 'wifi status', 'wi-fi status', 'network status', 'check my internet')):
+            w_info = self.computer_engine.network.get_wifi_status()
+            if w_info.get("connected") and w_info.get("ssid"):
+                return f"Connected to Wi-Fi network '{w_info['ssid']}' with {w_info['signal_percent']}% signal ({w_info.get('band', 'Wi-Fi')} band), {user}."
+            return f"Wi-Fi interface is active but not connected to an access point, {user}."
+
+        if any(w in lower for w in ('scan wifi', 'available wifi', 'scan networks')):
+            scan = self.computer_engine.network.scan_wifi_networks()
+            nets = [n["ssid"] for n in scan.get("networks", [])[:4] if n.get("ssid")]
+            if nets:
+                return f"Found {len(nets)} nearby Wi-Fi network(s): {', '.join(nets)}, {user}."
+            return f"Completed Wi-Fi scan, {user}."
+
+        if any(w in lower for w in ('test ping', 'ping test', 'network latency', 'why is my internet slow')):
+            p_res = self.computer_engine.network.ping_test(host="8.8.8.8", count=3)
+            if p_res.get("reachable"):
+                return f"Internet latency is {p_res.get('avg_latency_ms')} ms with {p_res.get('packet_loss_percent')}% packet loss, {user}."
+            return f"Ping destination unreachable. Please verify network gateway, {user}."
+
+        if any(w in lower for w in ('vpn status', 'check vpn', 'is vpn active')):
+            vpn = self.computer_engine.network.detect_vpn()
+            if vpn.get("vpn_active"):
+                return f"Secure VPN tunnel active ({', '.join(vpn['active_vpns'])}), {user}."
+            return f"No active VPN tunnel detected on network interfaces, {user}."
+
+        # Bluetooth & USB Peripherals
+        if any(w in lower for w in ('bluetooth devices', 'list bluetooth', 'bluetooth status')):
+            bt = self.computer_engine.bluetooth.list_bluetooth_devices()
+            devs = [d["name"] for d in bt.get("devices", [])[:4]]
+            dev_str = f": {', '.join(devs)}" if devs else ""
+            return f"Found {bt.get('total_paired', 0)} paired Bluetooth device(s){dev_str}, {user}."
+
+        if any(w in lower for w in ('usb devices', 'check usb', 'connected peripherals')):
+            usb = self.computer_engine.bluetooth.list_usb_devices()
+            return f"Detected {usb.get('count', 0)} connected USB hardware device(s) on your motherboard hubs, {user}."
 
         if 'bluetooth' in lower:
             if 'connect' in lower:
@@ -455,11 +554,66 @@ class CompanionSupervisor:
         if 'wi-fi' in lower or 'wifi' in lower:
             return f'Wi-Fi interface is active and connected, {user}.'
 
+        # Storage Analytics & Organization
+        if any(w in lower for w in ('storage space', 'disk space', 'drive space', 'how much space')):
+            d_info = self.computer_engine.storage.get_drive_overview()
+            drives = d_info.get("drives", [])
+            if drives:
+                d = drives[0]
+                status_warn = " Warning: drive is nearly full!" if d.get("is_critical") else ""
+                return f"Drive {d['device']} has {d['free_gb']} GB free out of {d['total_gb']} GB ({d['percent_used']}% used).{status_warn}"
+            return f"Storage check completed, {user}."
+
+        if any(w in lower for w in ('clean temp', 'analyze temp', 'temporary files', 'clean cache')):
+            t_info = self.computer_engine.storage.clean_temp_files(dry_run=True)
+            return f"Analyzed temporary files: {t_info.get('total_size_mb', 0)} MB in {t_info.get('temp_files_count', 0)} files can be safely cleaned, {user}."
+
         if any(w in lower for w in ('clean up my desktop', 'clean desktop', 'organize my desktop', 'organize desktop')):
+            self.computer_engine.storage.organize_directory()
             return f'I analyzed your desktop icons and files, {user}. Prepared folders for Documents, Images, and Installers. Desktop is neat and organized!'
 
-        if any(w in lower for w in ('why my microphone is not working', 'check my microphone', 'microphone status', 'mic status')):
-            return f'{user}, your default audio input device is detected and operational. Audio levels are normal.'
+        # Power, Battery & Workstation Session
+        if any(w in lower for w in ('battery status', 'check battery', 'battery percent')):
+            b = self.computer_engine.power.get_battery_status()
+            if b.get("has_battery"):
+                plug_str = "Plugged in (AC)" if b.get("power_plugged") else "On battery (DC)"
+                return f"Battery is at {b['percent']}% ({plug_str}). Estimated runtime: {b.get('time_remaining')}, {user}."
+            return f"Running on desktop direct AC power, {user}."
+
+        if any(w in lower for w in ('lock workstation', 'lock screen', 'lock pc', 'lock my laptop', 'lock computer')):
+            self.computer_engine.power.lock_workstation()
+            return f"Workstation session locked, {user}."
+
+        if any(w in lower for w in ('put laptop to sleep', 'sleep pc', 'system sleep')):
+            self.computer_engine.power.sleep()
+            return f"Putting computer into suspend mode, {user}."
+
+        if any(w in lower for w in ('shutdown computer', 'shut down my pc', 'turn off laptop')):
+            return f"{user}, safety confirmation required: are you sure you want to shut down your computer? Say 'confirm shutdown' to proceed."
+
+        if 'confirm shutdown' in lower:
+            self.computer_engine.power.shutdown(confirm=True, delay_seconds=15)
+            return f"Shutdown confirmed, {user}. System will shut down in 15 seconds. Say 'cancel shutdown' to abort."
+
+        if 'cancel shutdown' in lower:
+            self.computer_engine.power.cancel_shutdown()
+            return f"Shutdown cancelled, {user}."
+
+        # Hardware Troubleshooter: "Why is my laptop slow?"
+        if any(w in lower for w in ('why is my laptop slow', 'laptop is slow', 'computer is slow', 'why is my pc lagging', 'system diagnostic', 'check performance')):
+            diag = self.computer_engine.troubleshooter.diagnose_system_performance()
+            findings_str = "; ".join(diag.get("findings", []))
+            rec_str = diag["recommendations"][0] if diag.get("recommendations") else "System is running normally."
+            return f"{user}, hardware diagnostics: CPU at {diag['cpu_percent']}%, RAM at {diag['memory_percent']}%. Status: {diag['overall_status'].upper()}. Findings: {findings_str} Advice: {rec_str}"
+
+        # Full System Specifications / Inventory
+        if any(w in lower for w in ('system inventory', 'laptop specs', 'pc specs', 'device specifications')):
+            inv = self.computer_engine.inventory.get_full_inventory()
+            os_s = f"{inv['os']['system']} {inv['os']['release']}"
+            cpu_s = f"{inv['cpu']['logical_cores']} cores"
+            ram_s = f"{inv['memory']['total_gb']} GB RAM"
+            return f"{user}, system specifications: {os_s}, {cpu_s}, {ram_s} ({inv['memory']['percent_used']}% used)."
+
 
         # Screen Error Explaining & Fixing
         if any(w in lower for w in ('what is this error', 'explain this error', 'fix this error', 'fix error on screen', 'find an error on my screen and fix it')):
