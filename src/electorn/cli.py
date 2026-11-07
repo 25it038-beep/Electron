@@ -153,7 +153,7 @@ def default_callback(ctx: typer.Context) -> None:
         console.print("  [bold yellow]4.[/bold yellow] 🩺 [bold white]System Doctor[/bold white] — Audit developer runtimes, Ollama engine & models")
         console.print("  [bold blue]5.[/bold blue] 🌐 [bold white]HS AI Solutions Studio[/bold white] — Explore the product suite (Pendulum, Lumina, Ledger, HS CODE)")
         console.print("  [bold magenta]6.[/bold magenta] 📬 [bold white]Personal Communication Assistant[/bold white] — Email, WhatsApp, Files, Calls & Tasks")
-        console.print("  [bold magenta]7.[/bold magenta] 💖 [bold white]AI Companion Mode[/bold white] — Voice-enabled, screen-aware girlfriend persona (Aria)")
+        console.print("  [bold magenta]7.[/bold magenta] 💖 [bold white]AI Companion Mode[/bold white] — Voice-enabled, screen-aware personal AI companion (Aria)")
         console.print("  [bold magenta]8.[/bold magenta] 💖 📹 [bold white]AI Companion Video Call[/bold white] — 3D Animated Avatar, Web Audio Lip-Sync & Camera Vision")
         console.print("  [bold cyan]9.[/bold cyan] 🧠 [bold white]Autonomous Task Planner[/bold white] — 4-Stage Plan, Execute, Validate & Self-Repair")
         console.print("  [bold cyan]10.[/bold cyan] 🌐 [bold white]Deep Web Research Agent[/bold white] — Autonomous multi-source research & synthesized reports")
