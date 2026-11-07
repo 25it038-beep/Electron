@@ -184,8 +184,8 @@ class CompanionInterface:
 
     def _wait_for_companion_speech(self) -> None:
         """Wait for companion speech to finish while keeping UI responsive and allowing user interruption."""
-        time.sleep(0.1)
-        while self.supervisor.voice.is_speaking() and self._running:
+        time.sleep(0.15)
+        while (self.supervisor.voice.is_speaking() or getattr(self.supervisor.voice_engine, "_is_speaking", False)) and self._running:
             if sys.platform == "win32":
                 try:
                     import msvcrt

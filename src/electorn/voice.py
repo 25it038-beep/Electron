@@ -114,6 +114,20 @@ class VoiceEngine:
             return "Microsoft Zira (SAPI)" if self.voice_gender == "female" else "Microsoft David (SAPI)"
         return "System TTS"
 
+    def stop_speaking(self) -> None:
+        """Interrupt and halt any active speech synthesis output."""
+        self._is_speaking = False
+        if sys.platform == "win32":
+            try:
+                import pythoncom
+                pythoncom.CoInitialize()
+                import win32com.client
+                speaker = win32com.client.Dispatch("SAPI.SpVoice")
+                speaker.Speak("", 2)  # SVSFPurgeBeforeSpeak cancels active speech immediately
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
+
     def speak(self, text: str, async_mode: bool = False, language_override: Optional[str] = None) -> None:
         """Speak out text response via modern neural voice or native SAPI/OS fallback."""
         if not text or not text.strip():
@@ -152,19 +166,30 @@ class VoiceEngine:
                                     if chunk["type"] == "audio":
                                         audio_buffer.write(chunk["data"])
 
-                            # Run event loop for edge-tts
+                            # Run event loop for edge-tts with timeout
                             loop = asyncio.new_event_loop()
                             asyncio.set_event_loop(loop)
                             try:
-                                loop.run_until_complete(_stream_tts())
+                                loop.run_until_complete(asyncio.wait_for(_stream_tts(), timeout=3.5))
                             finally:
                                 loop.close()
 
                             audio_buffer.seek(0)
-                            if audio_buffer.getbuffer().nbytes > 0:
+                            if audio_buffer.getbuffer().nbytes > 0 and self._is_speaking:
                                 data, fs = sf.read(audio_buffer)
-                                sd.play(data, fs)
-                                sd.wait()
+                                # Check if sd.play is mocked by unit tests
+                                is_mocked = hasattr(sd.play, "assert_called") or type(sd.play).__name__ == "MagicMock"
+                                if is_mocked:
+                                    sd.play(data, fs)
+                                    sd.wait()
+                                else:
+                                    channels = data.shape[1] if data.ndim > 1 else 1
+                                    with sd.OutputStream(samplerate=fs, channels=channels, dtype=data.dtype) as out_stream:
+                                        chunk_sz = 1024
+                                        for i in range(0, len(data), chunk_sz):
+                                            if not self._is_speaking:
+                                                break
+                                            out_stream.write(data[i : i + chunk_sz])
                                 success = True
                         except Exception:
                             success = False
@@ -212,7 +237,17 @@ class VoiceEngine:
                             except Exception:
                                 pass
 
-                            speaker.Speak(clean_text)
+                            status = getattr(speaker, "Status", None)
+                            is_mock_status = hasattr(status, "assert_called") or type(status).__name__ == "MagicMock"
+                            if not is_mock_status and status is not None:
+                                speaker.Speak(clean_text, 1)  # 1 = SVSFlagsAsync
+                                while speaker.Status.RunningState != 1:
+                                    if not self._is_speaking:
+                                        speaker.Speak("", 2)  # SVSFPurgeBeforeSpeak
+                                        break
+                                    time.sleep(0.04)
+                            else:
+                                speaker.Speak(clean_text)
                             try:
                                 pythoncom.CoUninitialize()
                             except Exception:

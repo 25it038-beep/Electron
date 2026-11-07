@@ -83,6 +83,17 @@ class AdaptiveVAD:
         self._pre_speech_ring.clear()
         self._audio_buffer.clear()
 
+    def calibrate(self, ambient_frames: List[np.ndarray]) -> float:
+        """Calibrate noise floor based on initial ambient acoustic frames."""
+        energies = []
+        for f in ambient_frames:
+            if len(f) > 0:
+                energies.append(float(np.sqrt(np.mean(f.astype(float) ** 2))))
+        if energies:
+            self.noise_floor = max(20.0, float(np.median(energies)))
+            self.speech_energy_threshold = max(self.config.min_speech_energy, self.noise_floor * self.config.snr_ratio)
+        return self.noise_floor
+
     def process_frame(self, frame: np.ndarray) -> Tuple[AudioFrameCategory, float]:
         """Process a single PCM int16 audio frame and return classification and RMS energy."""
         if len(frame) == 0:
