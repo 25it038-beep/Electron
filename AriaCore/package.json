@@ -1,0 +1,17 @@
+{
+  "name": "aria-core",
+  "version": "1.0.0",
+  "description": "ARIA Unified Autonomous AI Companion Core Coordinator",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "hace-computer-engine": "file:../ComputerEngine"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0"
+  }
+}

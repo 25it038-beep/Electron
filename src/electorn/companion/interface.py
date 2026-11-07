@@ -95,6 +95,10 @@ class CompanionInterface:
             "Barge-In:", barge_in,
             "Activity:", f"[cyan]{state.current_activity.value.upper()}[/cyan]",
         )
+        status_table.add_row(
+            "Computer Control:", "[bold green]🟢 ACTIVE (HACE Engine)[/bold green]",
+            "Emergency Stop:", "[bold yellow]Ready (say 'STOP')[/bold yellow]",
+        )
 
         obs_text = state.active_window_title or "Inspecting desktop workspace..."
         if len(obs_text) > 60:

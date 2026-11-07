@@ -1,0 +1,23 @@
+{
+  "name": "hace-computer-engine",
+  "version": "1.0.0",
+  "description": "HS Autonomous Computer Engine (HACE) — Autonomous Desktop & Browser Automation Engine for Electorn AI",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "node dist/tests/index.js"
+  },
+  "keywords": [
+    "computer-use",
+    "desktop-automation",
+    "ai-agent",
+    "electorn",
+    "hace"
+  ],
+  "author": "Harshan Seliyan",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.6.6"
+  }
+}
