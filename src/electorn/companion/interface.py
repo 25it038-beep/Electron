@@ -166,6 +166,7 @@ class CompanionInterface:
         table.add_row("T / Enter", "Type a message or slash command")
         table.add_row("S", "Take instant screen snapshot & run vision analysis")
         table.add_row("M", "Mute or unmute microphone")
+        table.add_row("C", "Toggle hands-free continuous listening mode")
         table.add_row("P", "Pause or resume companion speech")
         table.add_row("D", "Redisplay status dashboard")
         table.add_row("H / ?", "Show this command cheat sheet")
@@ -258,6 +259,11 @@ class CompanionInterface:
                                 status_txt = "MUTED" if is_mut else "UNMUTED"
                                 console.print(f"\n[yellow]Microphone {status_txt}.[/yellow]\n")
                                 continue
+                            elif ch in (b'c', b'C'):
+                                c_state = self.supervisor.voice.toggle_continuous_listening()
+                                status_txt = "ENABLED (Hands-free continuous mode)" if c_state else "DISABLED (Auto turn-taking)"
+                                console.print(f"\n[bold green]🎙️ Continuous Listening {status_txt}.[/bold green]\n")
+                                continue
                             elif ch in (b'p', b'P'):
                                 if self.supervisor.state.is_paused:
                                     self.supervisor.resume()
@@ -294,12 +300,19 @@ class CompanionInterface:
                     and not self.supervisor.state.is_paused
                 ):
                     def status_update(msg: str) -> None:
-                        if "Transcribing" in msg:
+                        if "Thinking pause" in msg or "waiting" in msg:
+                            console.print(f"[dim yellow]{msg}[/dim yellow]", end="\r")
+                        elif "Transcribing" in msg:
                             console.print(f"[dim cyan]{msg}[/dim cyan]", end="\r")
+                        elif "User interrupted" in msg:
+                            console.print(f"[bold red]{msg}[/bold red]\n")
+                        elif "Listening" in msg and "'" in msg:
+                            console.print(f"[dim green]{msg}[/dim green]", end="\r")
 
-                    # Live mic recording
+                    # Live mic recording with natural pause tolerance
+                    timeout = 30.0 if self.supervisor.voice.is_continuous_listening() else 6.0
                     voice_text = self.supervisor.voice.listen_for_user(
-                        timeout_seconds=3.5,
+                        timeout_seconds=timeout,
                         status_cb=status_update,
                     )
 
@@ -356,6 +369,18 @@ class CompanionInterface:
         if lower in ("/unmute", "unmute"):
             self.supervisor.unmute()
             console.print("[green]🎙️ Microphone unmuted.[/green]\n")
+            return True
+
+        if lower.startswith("/continuous") or lower.startswith("continuous"):
+            parts = lower.split()
+            if len(parts) > 1 and parts[1] == "off":
+                self.supervisor.voice.disable_continuous_listening()
+            elif len(parts) > 1 and parts[1] == "on":
+                self.supervisor.voice.enable_continuous_listening()
+            else:
+                self.supervisor.voice.toggle_continuous_listening()
+            c_status = "ENABLED" if self.supervisor.voice.is_continuous_listening() else "DISABLED"
+            console.print(f"[bold green]🎙️ Continuous listening {c_status}.[/bold green]\n")
             return True
 
         if lower in ("/focus", "focus"):

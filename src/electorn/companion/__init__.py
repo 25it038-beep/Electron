@@ -39,6 +39,9 @@ from electorn.companion.tools import CompanionTools
 from electorn.companion.video_server import VideoCallServer
 from electorn.companion.vision_analyzer import VisionAnalyzer
 from electorn.companion.voice_session import CompanionVoiceSession
+from electorn.companion.voice_vad import AdaptiveVAD, AdaptiveVADConfig, PauseType, AudioFrameCategory
+from electorn.companion.sentence_completer import SentenceCompleter
+from electorn.companion.conversational_turn import ConversationalTurnManager, TurnState
 
 __all__ = [
     "companion_app",
@@ -74,6 +77,13 @@ __all__ = [
     "CompanionTools",
     "VisionAnalyzer",
     "CompanionVoiceSession",
+    "AdaptiveVAD",
+    "AdaptiveVADConfig",
+    "PauseType",
+    "AudioFrameCategory",
+    "SentenceCompleter",
+    "ConversationalTurnManager",
+    "TurnState",
     "AvatarStyle",
     "AvatarExpression",
     "VideoCallConfig",

@@ -370,6 +370,15 @@ class CompanionSupervisor:
             self.computer_engine.reset_safety()
             return f'Safety lock reset. Computer control resumed, {user}.'
 
+        # Continuous Listening Voice Controls
+        if any(w in lower for w in ('enable continuous listening', 'start continuous listening', 'continuous listening on', 'enable continuous mode')):
+            self.voice.enable_continuous_listening()
+            return f"Continuous listening mode enabled, {user}. I'll stay on the line and listen without time limits."
+
+        if any(w in lower for w in ('disable continuous listening', 'stop continuous listening', 'continuous listening off', 'disable continuous mode')):
+            self.voice.disable_continuous_listening()
+            return f"Continuous listening disabled, {user}. Switched to normal turn-taking mode."
+
         # World Awareness & Festivals
         if any(w in lower for w in ('what is special today', 'is today special', 'what day is it', 'festival today', 'today festival', 'any festival today')):
             ctx = self.awareness.get_today_context()
